@@ -34,7 +34,18 @@ class Settings(BaseSettings):
     # OpenAI
     OPENAI_API_KEY: str = ""
     OPENAI_MODEL: str = "gpt-4o"
+    OPENAI_EMBED_MODEL: str = "text-embedding-3-small"
     WHISPER_MODEL: str = "whisper-1"
+
+    # RAG / Vector store
+    CHUNK_SIZE: int = 500          # tokens per chunk
+    CHUNK_OVERLAP: int = 50        # overlap between chunks
+    RAG_TOP_K: int = 5             # number of chunks to retrieve per query
+    VECTOR_STORE: str = "pgvector" # "pgvector" or "pinecone"
+
+    # Clustering
+    CLUSTER_MIN_SAMPLES: int = 3   # min submissions to form a cluster
+    EMBED_BATCH_SIZE: int = 32     # batch size for sentence-transformer inference
 
     # Twilio (WhatsApp)
     TWILIO_ACCOUNT_SID: str = ""

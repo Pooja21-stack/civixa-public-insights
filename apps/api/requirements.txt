@@ -28,6 +28,8 @@ deep-translator==1.11.4
 pycountry==24.6.1
 geopy==2.4.1
 python-dotenv==1.0.1
+aiofiles==23.2.1
+langdetect==1.0.9
 WeasyPrint==62.3
 pytest==8.2.2
 pytest-asyncio==0.23.7
