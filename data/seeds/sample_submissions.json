@@ -1,0 +1,63 @@
+[
+  {
+    "id": "sub-001",
+    "channel": "web",
+    "text_raw": "The road to our village has been broken for 2 years. Every monsoon it gets worse. Children cannot go to school safely.",
+    "lang": "en",
+    "ward_id": "ward-03",
+    "lat": 28.6139,
+    "lng": 77.2090,
+    "themes": ["roads", "schools"],
+    "urgency_level": "high",
+    "urgency_score": 0.82
+  },
+  {
+    "id": "sub-002",
+    "channel": "whatsapp",
+    "text_raw": "हमारे वार्ड में कोई सरकारी स्कूल नहीं है। बच्चों को 7 किलोमीटर दूर जाना पड़ता है।",
+    "text_translated": "There is no government school in our ward. Children have to go 7 kilometres away.",
+    "lang": "hi",
+    "ward_id": "ward-03",
+    "lat": 28.6200,
+    "lng": 77.2150,
+    "themes": ["schools"],
+    "urgency_level": "critical",
+    "urgency_score": 0.95
+  },
+  {
+    "id": "sub-003",
+    "channel": "web",
+    "text_raw": "Water supply is very irregular. We get water only twice a week for 30 minutes.",
+    "lang": "en",
+    "ward_id": "ward-05",
+    "lat": 28.6300,
+    "lng": 77.2200,
+    "themes": ["water"],
+    "urgency_level": "high",
+    "urgency_score": 0.78
+  },
+  {
+    "id": "sub-004",
+    "channel": "voice",
+    "text_raw": "The primary health centre in ward 2 has been closed for 6 months. Pregnant women have to travel 20km.",
+    "lang": "en",
+    "ward_id": "ward-02",
+    "lat": 28.6050,
+    "lng": 77.1980,
+    "themes": ["health"],
+    "urgency_level": "critical",
+    "urgency_score": 0.98
+  },
+  {
+    "id": "sub-005",
+    "channel": "web",
+    "text_raw": "Power cuts for 8-10 hours daily. Small businesses are suffering. Need reliable electricity.",
+    "lang": "en",
+    "ward_id": "ward-04",
+    "lat": 28.6180,
+    "lng": 77.2050,
+    "themes": ["electricity"],
+    "urgency_level": "high",
+    "urgency_score": 0.75
+  }
+]

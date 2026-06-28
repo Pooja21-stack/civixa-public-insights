@@ -1,0 +1,47 @@
+[
+  {
+    "id": "ward-01",
+    "name": "Ward 1 — Central",
+    "constituency": "Demo Constituency",
+    "population": 18500,
+    "school_age_population": 3200,
+    "nearest_school_km": 1.2,
+    "nearest_hospital_km": 2.5
+  },
+  {
+    "id": "ward-02",
+    "name": "Ward 2 — North",
+    "constituency": "Demo Constituency",
+    "population": 22000,
+    "school_age_population": 4100,
+    "nearest_school_km": 2.8,
+    "nearest_hospital_km": 20.0
+  },
+  {
+    "id": "ward-03",
+    "name": "Ward 3 — East",
+    "constituency": "Demo Constituency",
+    "population": 31000,
+    "school_age_population": 5800,
+    "nearest_school_km": 6.2,
+    "nearest_hospital_km": 8.5
+  },
+  {
+    "id": "ward-04",
+    "name": "Ward 4 — South",
+    "constituency": "Demo Constituency",
+    "population": 19200,
+    "school_age_population": 3500,
+    "nearest_school_km": 3.1,
+    "nearest_hospital_km": 4.2
+  },
+  {
+    "id": "ward-05",
+    "name": "Ward 5 — West",
+    "constituency": "Demo Constituency",
+    "population": 24800,
+    "school_age_population": 4600,
+    "nearest_school_km": 2.0,
+    "nearest_hospital_km": 6.0
+  }
+]
