@@ -6,11 +6,31 @@ import { Submission } from "@/types";
 import { ThemeBadge, UrgencyBadge, ChannelIcon, Spinner, EmptyState } from "@/components/ui";
 import { MOCK_WARDS, MOCK_THEMES } from "@/lib/mock-data";
 
+// ISO 639-1 code → native language name
+const LANG_NAMES: Record<string, string> = {
+  hi: "हिंदी",
+  gu: "ગુજરાતી",
+  ta: "தமிழ்",
+  te: "తెలుగు",
+  kn: "ಕನ್ನಡ",
+  mr: "मराठी",
+  bn: "বাংলা",
+  pa: "ਪੰਜਾਬੀ",
+  ml: "മലയാളം",
+  ur: "اردو",
+};
+
+function getLangLabel(code: string | undefined): string | null {
+  if (!code || code === "en" || code === "string") return null;
+  return LANG_NAMES[code.toLowerCase()] ?? code.toUpperCase();
+}
+
 export default function SubmissionsFeed() {
-  const [items, setItems]       = useState<Submission[]>([]);
-  const [loading, setLoading]   = useState(true);
-  const [themeFilter, setTheme] = useState<string>("");
-  const [wardFilter, setWard]   = useState<string>("");
+  const [items, setItems]         = useState<Submission[]>([]);
+  const [loading, setLoading]     = useState(true);
+  const [themeFilter, setTheme]   = useState<string>("");
+  const [wardFilter, setWard]     = useState<string>("");
+  const [expanded, setExpanded]   = useState<string | null>(null);
 
   useEffect(() => {
     setLoading(true);
@@ -91,8 +111,8 @@ export default function SubmissionsFeed() {
                   {new Date(s.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                 </span>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

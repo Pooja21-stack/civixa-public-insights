@@ -18,8 +18,8 @@ export default function DashboardStatsPanel() {
 
   if (!stats) return <div className="flex justify-center py-10"><Spinner /></div>;
 
-  const chartData = stats.top_themes.map((t) => ({
-    name: THEME_LABELS[t.theme].split(" ")[0], // short label
+  const chartData = (stats.top_themes ?? []).map((t) => ({
+    name: (THEME_LABELS[t.theme] ?? t.theme).split(" ")[0],
     count: t.count,
     theme: t.theme,
   }));

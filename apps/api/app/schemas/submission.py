@@ -20,14 +20,14 @@ class SubmissionResponse(BaseModel):
     id: str
     channel: Channel
     text_raw: str
-    text_translated: Optional[str]
-    lang_detected: str
-    lat: Optional[float]
-    lng: Optional[float]
-    ward_id: Optional[str]
-    themes: List[str]
-    urgency_score: float
-    urgency_level: UrgencyLevel
+    text_translated: Optional[str] = None
+    lang_detected: str = "en"
+    lat: Optional[float] = None
+    lng: Optional[float] = None
+    ward_id: Optional[str] = None
+    themes: List[str] = []
+    urgency_score: float = 0.5
+    urgency_level: UrgencyLevel = UrgencyLevel.medium
     created_at: datetime
 
 

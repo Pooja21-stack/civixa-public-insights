@@ -6,8 +6,9 @@ export interface Submission {
   id: string;
   channel: Channel;
   text_raw: string;
-  text_translated: string;
-  lang: string;
+  text_translated?: string;
+  lang?: string;           // frontend alias
+  lang_detected?: string;  // real API field
   lat?: number;
   lng?: number;
   ward_id?: string;
@@ -55,8 +56,15 @@ export interface Ward {
 
 export interface DashboardStats {
   total_submissions: number;
-  submissions_today: number;
-  top_themes: { theme: ThemeKey; count: number }[];
-  wards_covered: number;
-  top_projects: Project[];
+  submissions_today: number;       // frontend alias (0 if not from API)
+  top_themes: { theme: ThemeKey; count: number }[];  // frontend alias
+  wards_covered: number;           // frontend alias
+  top_projects: Project[];         // frontend alias
+
+  // Real API fields (also present when USE_MOCK_API=false)
+  processed_submissions?: number;
+  theme_breakdown?: { theme: string; count: number; pct: number }[];
+  urgency_distribution?: { low: number; medium: number; high: number; critical: number };
+  top_priority_projects?: Partial<Project>[];
+  active_wards?: number;
 }

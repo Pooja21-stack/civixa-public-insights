@@ -1,4 +1,4 @@
-# CivIxa — Public Insights
+# CivIxa Public Insights
 
 > **Multilingual AI platform** where citizens submit development suggestions via voice, text, photos, or messaging apps — and MPs get ranked, evidence-backed priority works.
 
@@ -77,8 +77,8 @@ cp .env.example .env
 ### 2. Start Infrastructure
 
 ```bash
-cd infra
-docker-compose up db redis -d
+git clone <repo>
+cd civixa-public-insights
 ```
 
 ### 3. Setup Backend
@@ -198,6 +198,7 @@ All components are normalized 0–1 before weighting. Formula is configurable by
 
 ```
 civixa-public-insights/
+│
 ├── apps/
 │   ├── web/                    # Next.js frontend
 │   │   ├── src/
