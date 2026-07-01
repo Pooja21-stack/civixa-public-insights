@@ -64,8 +64,44 @@ export function RankBadge({ rank }: { rank: number }) {
 // ─── ChannelIcon ──────────────────────────────────────────────────────────────
 
 export function ChannelIcon({ channel }: { channel: "web" | "whatsapp" | "voice" }) {
-  const map = { web: "🌐", whatsapp: "💬", voice: "🎙️" };
-  return <span title={channel} className="text-base">{map[channel]}</span>;
+  const config = {
+    web: {
+      icon: "🌐",
+      label: "Web",
+      bg: "bg-primary-100",
+      text: "text-primary-700",
+      border: "border-primary-200"
+    },
+    whatsapp: {
+      icon: "💬",
+      label: "WhatsApp",
+      bg: "bg-mint-100",
+      text: "text-mint-700",
+      border: "border-mint-200"
+    },
+    voice: {
+      icon: "🎙️",
+      label: "Voice",
+      bg: "bg-purple-100",
+      text: "text-purple-700",
+      border: "border-purple-200"
+    }
+  };
+  
+  const { icon, label, bg, text, border } = config[channel];
+  
+  return (
+    <span
+      title={`Submitted via ${label}`}
+      className={clsx(
+        "inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-semibold border-2",
+        bg, text, border
+      )}
+    >
+      <span className="text-sm">{icon}</span>
+      <span>{label}</span>
+    </span>
+  );
 }
 
 // ─── StatCard ─────────────────────────────────────────────────────────────────
