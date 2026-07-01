@@ -27,7 +27,23 @@ export async function fetchDashboardStats(): Promise<DashboardStats> {
     return MOCK_DASHBOARD_STATS;
   }
   const res = await apiClient.get("/api/v1/dashboard/stats");
-  return res.data;
+  const d = res.data;
+
+  // Normalise real API response → DashboardStats shape the components expect
+  return {
+    ...d,
+    // Map theme_breakdown → top_themes
+    top_themes: (d.theme_breakdown ?? []).map((t: { theme: string; count: number }) => ({
+      theme: t.theme as any,
+      count: t.count,
+    })),
+    // Map active_wards → wards_covered
+    wards_covered: d.active_wards ?? 0,
+    // Map top_priority_projects → top_projects
+    top_projects: (d.top_priority_projects ?? []) as any[],
+    // submissions_today not tracked by API yet — default to 0
+    submissions_today: 0,
+  };
 }
 
 // ─── Projects ─────────────────────────────────────────────────────────────────

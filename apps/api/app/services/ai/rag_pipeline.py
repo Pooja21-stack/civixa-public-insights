@@ -6,27 +6,22 @@ What this does
 1. INGEST: Given a PDF/text document (local dev plan, census data, etc.)
    - Extract raw text  (pdf_loader.py handles PDF → text)
    - Split into overlapping chunks
-   - Embed each chunk with OpenAI text-embedding-3-small
+   - Embed each chunk with sentence-transformers (local, free, no API key)
    - Store chunks + vectors in pgvector (documents_chunks table)
    - Mark the parent Document as is_indexed=True
 
 2. QUERY: Given a plain-English question about a ward/theme
-   - Embed the question
-   - Cosine-similarity search in pgvector
-   - Feed top-K chunks to GPT-4o as context
-   - Return a structured answer used by the evidence generator
+   - Embed the question with sentence-transformers
+   - Cosine-similarity search in pgvector (or in-memory fallback)
+   - Return top-K chunks — used by the evidence generator as context
 
 Architecture note
 -----------------
 We use pgvector directly (no LangChain overhead) to keep the dependency
-footprint small and stay compatible with Python 3.9.  LangChain is still
-listed in requirements.txt for future extension.
+footprint small and stay compatible with Python 3.9.
 
-Fallback
---------
-If OPENAI_API_KEY is not set, ingest() stores chunks as plain text and
-query() returns an empty result — the evidence generator handles this
-gracefully by relying on citizen data alone.
+All embeddings use sentence-transformers (all-MiniLM-L6-v2, 384-dim).
+No internet connection or API key required.
 """
 from __future__ import annotations
 
@@ -79,41 +74,55 @@ def chunk_text(text: str, chunk_size: int = None, overlap: int = None) -> list[s
 # Embeddings
 # ---------------------------------------------------------------------------
 
+# Module-level cached sentence-transformer model
+_st_model = None
+
+
+def _get_st_model():
+    """Lazy-load sentence-transformers model (multilingual, local, free)."""
+    global _st_model
+    if _st_model is None:
+        try:
+            from sentence_transformers import SentenceTransformer
+            # paraphrase-multilingual-MiniLM-L12-v2:
+            #   384-dim, ~120MB, supports Hindi/Tamil/etc, fast on CPU
+            _st_model = SentenceTransformer("paraphrase-multilingual-MiniLM-L12-v2")
+            logger.info("Loaded sentence-transformer for RAG embeddings")
+        except ImportError:
+            logger.warning("sentence-transformers not installed — using zero embeddings for RAG")
+    return _st_model
+
+
 async def embed_texts(texts: list[str]) -> list[list[float]]:
     """
-    Embed a list of texts using OpenAI text-embedding-3-small.
-
-    Returns a list of float vectors, one per input text.
-    Falls back to zero-vectors if no API key is set, so the pipeline
-    can run in test/offline mode without crashing.
+    Embed texts using local sentence-transformers (free, no API key).
+    Falls back to zero-vectors if model is unavailable.
     """
     if not texts:
         return []
 
-    if not settings.OPENAI_API_KEY:
-        logger.warning("OPENAI_API_KEY not set — returning zero embeddings")
-        # 1536 dims for text-embedding-3-small
-        return [[0.0] * 1536 for _ in texts]
+    model = _get_st_model()
+    if model is None:
+        # Zero-vectors: RAG still works, just returns first chunk for every query
+        return [[0.0] * 384 for _ in texts]
 
-    from openai import AsyncOpenAI
-    client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
+    import asyncio
+    loop = asyncio.get_event_loop()
 
-    batch_size = settings.EMBED_BATCH_SIZE
-    all_vectors: list[list[float]] = []
+    def _encode():
+        return model.encode(
+            texts,
+            batch_size        = settings.EMBED_BATCH_SIZE,
+            show_progress_bar = False,
+            convert_to_numpy  = True,
+        ).tolist()
 
-    for i in range(0, len(texts), batch_size):
-        batch = texts[i : i + batch_size]
-        try:
-            response = await client.embeddings.create(
-                model=settings.OPENAI_EMBED_MODEL,
-                input=batch,
-            )
-            all_vectors.extend([item.embedding for item in response.data])
-        except Exception as e:
-            logger.error("Embedding batch %d failed: %s — using zeros", i // batch_size, e)
-            all_vectors.extend([[0.0] * 1536 for _ in batch])
-
-    return all_vectors
+    try:
+        vectors = await loop.run_in_executor(None, _encode)
+        return vectors
+    except Exception as e:
+        logger.error("Embedding failed: %s — using zeros", e)
+        return [[0.0] * 384 for _ in texts]
 
 
 # ---------------------------------------------------------------------------

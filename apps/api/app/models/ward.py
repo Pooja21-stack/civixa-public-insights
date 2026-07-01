@@ -16,5 +16,15 @@ class Ward(Base, TimestampMixin):
     boundary_geojson: Mapped[dict] = mapped_column(JSON, nullable=True)
     demographics: Mapped[dict] = mapped_column(JSON, default=dict)
 
-    submissions = relationship("Submission", back_populates="ward")
-    projects = relationship("Project", back_populates="ward")
+    submissions = relationship(
+        "Submission",
+        back_populates="ward",
+        primaryjoin="Ward.id == Submission.ward_id",
+        foreign_keys="[Submission.ward_id]",
+    )
+    projects = relationship(
+        "Project",
+        back_populates="ward",
+        primaryjoin="Ward.id == Project.ward_id",
+        foreign_keys="[Project.ward_id]",
+    )

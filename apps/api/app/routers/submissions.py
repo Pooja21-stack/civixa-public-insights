@@ -2,10 +2,12 @@ from __future__ import annotations
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Query
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.auth_deps import get_current_user, require_role
 from app.core.database import get_db
+from app.models.user import User
 from app.schemas.submission import SubmissionResponse, SubmissionListResponse
 from app.services import submission_service
 from app.workers.tasks import process_submission
@@ -14,6 +16,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+# ── POST /submissions — public (citizens submit without login) ─────────────────
 @router.post("", response_model=SubmissionResponse, status_code=201)
 async def create_submission(
     text_raw: str                    = Form(...),
@@ -71,6 +74,7 @@ async def create_submission(
     return submission
 
 
+# ── Staff / MP / Admin — protected read endpoints ─────────────────────────────
 @router.get("", response_model=SubmissionListResponse)
 async def list_submissions(
     page:     int           = Query(1, ge=1),
@@ -78,22 +82,34 @@ async def list_submissions(
     theme:    Optional[str] = Query(None, description="Filter by theme key"),
     ward_id:  Optional[str] = Query(None, description="Filter by ward ID"),
     db:       AsyncSession  = Depends(get_db),
+    _user:    User          = Depends(require_role("staff", "mp", "admin")),
 ):
-    """Return a paginated list of submissions with optional filters."""
-    result = await submission_service.list_submissions(
-        db       = db,
-        page     = page,
-        per_page = per_page,
-        theme    = theme,
-        ward_id  = ward_id,
+    """Return a paginated list of submissions. Requires staff / mp / admin role."""
+    return await submission_service.list_submissions(
+        db=db, page=page, per_page=per_page, theme=theme, ward_id=ward_id,
     )
-    return result
 
 
 @router.get("/hotspots")
-async def get_hotspots(db: AsyncSession = Depends(get_db)):
-    """
-    Return a GeoJSON FeatureCollection of all geo-tagged submissions.
-    Used by the Mapbox heatmap on the MP dashboard.
-    """
+async def get_hotspots(
+    db:    AsyncSession = Depends(get_db),
+    _user: User         = Depends(require_role("staff", "mp", "admin")),
+):
+    """GeoJSON heatmap — requires staff / mp / admin role."""
     return await submission_service.get_hotspots(db)
+
+
+@router.get("/{submission_id}", response_model=SubmissionResponse)
+async def get_submission(
+    submission_id: str,
+    db:    AsyncSession = Depends(get_db),
+    _user: User         = Depends(require_role("staff", "mp", "admin")),
+):
+    """Return a single submission by ID. Requires staff / mp / admin role."""
+    from app.models.submission import Submission as Sub
+    from sqlalchemy import select as sa_select
+    result = await db.execute(sa_select(Sub).where(Sub.id == submission_id))
+    submission = result.scalar_one_or_none()
+    if not submission:
+        raise HTTPException(status_code=404, detail="Submission not found")
+    return submission

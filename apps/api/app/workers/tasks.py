@@ -150,12 +150,75 @@ async def _process_submission_async(submission_id: str) -> None:
 
 
 @celery_app.task(name="app.workers.tasks.ingest_document", bind=True, max_retries=3)
-def ingest_document(self, document_id: str):
+def ingest_document(self, document_id: str, file_path: str = "", doc_type: str = "development_plan"):
     """
-    RAG ingestion pipeline — full implementation in the RAG step.
-    1. Extract text from PDF/CSV
-    2. Chunk into ~500-token segments
-    3. Embed with sentence-transformers
-    4. Store in pgvector for retrieval
+    Full RAG ingestion pipeline.
+    1. Read file bytes from disk
+    2. Extract text (PDF via PyMuPDF, CSV/TXT plain)
+    3. Chunk into ~500-token segments
+    4. Embed with sentence-transformers
+    5. Store chunks in in-memory vector store (pgvector in production)
+    6. Update document status in DB
     """
-    logger.info("ingest_document queued for %s — RAG pipeline not yet implemented", document_id)
+    try:
+        _run_async(_ingest_document_async(document_id, file_path, doc_type))
+    except Exception as exc:
+        logger.error("ingest_document failed for %s: %s", document_id, exc)
+        raise self.retry(exc=exc, countdown=2 ** self.request.retries)
+
+
+async def _ingest_document_async(document_id: str, file_path: str, doc_type: str) -> None:
+    """Async implementation of the document ingestion pipeline."""
+    import os
+
+    if not file_path or not os.path.exists(file_path):
+        logger.warning("ingest_document: file not found at %s", file_path)
+        return
+
+    # 1. Read file
+    with open(file_path, "rb") as f:
+        file_bytes = f.read()
+
+    # 2. Extract text
+    ext = os.path.splitext(file_path)[1].lower()
+    if ext == ".pdf":
+        from app.services.ingestion.pdf_loader import extract_text_from_pdf
+        text = extract_text_from_pdf(file_bytes)
+    else:
+        # CSV / TXT
+        text = file_bytes.decode("utf-8", errors="replace")
+
+    if not text.strip():
+        logger.warning("ingest_document: empty text extracted from %s", file_path)
+        return
+
+    logger.info("ingest_document: extracted %d chars from %s", len(text), file_path)
+
+    # 3+4+5. Chunk, embed, store in RAG vector store
+    from app.services.ai.rag_pipeline import ingest_document as rag_ingest
+    result = await rag_ingest(
+        document_id=document_id,
+        title=os.path.basename(file_path),
+        text=text,
+        doc_type=doc_type,
+    )
+    num_chunks = result.get("chunks_stored", 0)
+
+    logger.info("ingest_document: ingested %d chunks for document %s", num_chunks, document_id)
+
+    # 6. Update document status in DB (if Document model exists)
+    try:
+        from app.core.database import AsyncSessionLocal
+        from app.models.document import Document
+        from sqlalchemy import select as sa_select
+
+        async with AsyncSessionLocal() as db:
+            res = await db.execute(sa_select(Document).where(Document.id == document_id))
+            doc = res.scalar_one_or_none()
+            if doc:
+                doc.status = "indexed"
+                doc.chunk_count = num_chunks
+                doc.is_indexed = True
+                await db.commit()
+    except Exception as e:
+        logger.warning("Could not update document status in DB: %s", e)

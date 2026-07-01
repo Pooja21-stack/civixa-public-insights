@@ -20,39 +20,51 @@ class Settings(BaseSettings):
     DB_PORT: int = 5432
     DB_NAME: str = "civixa_db"
 
+    # Optional SQLite override — set this to use SQLite instead of Postgres
+    # e.g.  SQLITE_URL=sqlite+aiosqlite:///./demo.db
+    SQLITE_URL: str = ""
+
     @property
     def DATABASE_URL(self) -> str:
+        if self.SQLITE_URL:
+            return self.SQLITE_URL
         return f"postgresql+asyncpg://{self.DB_USER}:{self.DB_PASS}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
 
     @property
     def DATABASE_URL_SYNC(self) -> str:
+        if self.SQLITE_URL:
+            return self.SQLITE_URL.replace("+aiosqlite", "")
         return f"postgresql+psycopg2://{self.DB_USER}:{self.DB_PASS}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
 
     # Redis / Celery
     REDIS_URL: str = "redis://localhost:6379/0"
 
-    # OpenAI
-    OPENAI_API_KEY: str = ""
-    OPENAI_MODEL: str = "gpt-4o"
-    OPENAI_EMBED_MODEL: str = "text-embedding-3-small"
-    WHISPER_MODEL: str = "whisper-1"
+    # ── Ollama (local LLM — free, no API key needed) ──────────────────────────
+    OLLAMA_BASE_URL: str = "http://localhost:11434"
+    OLLAMA_MODEL: str = "mistral"          # mistral | llama3 | any pulled model
+    OLLAMA_EMBED_MODEL: str = "nomic-embed-text"   # local embeddings (optional)
+    OLLAMA_TIMEOUT: int = 120              # seconds per request
+
+    # ── Whisper.cpp (local transcription — free) ──────────────────────────────
+    WHISPER_CPP_MODEL: str = "base"       # tiny | base | small | medium
+    WHISPER_CPP_PATH: str = ""            # path to whisper.cpp binary (optional)
 
     # RAG / Vector store
-    CHUNK_SIZE: int = 500          # tokens per chunk
-    CHUNK_OVERLAP: int = 50        # overlap between chunks
-    RAG_TOP_K: int = 5             # number of chunks to retrieve per query
-    VECTOR_STORE: str = "pgvector" # "pgvector" or "pinecone"
+    CHUNK_SIZE: int = 500
+    CHUNK_OVERLAP: int = 50
+    RAG_TOP_K: int = 5
+    VECTOR_STORE: str = "pgvector"
 
     # Clustering
-    CLUSTER_MIN_SAMPLES: int = 3   # min submissions to form a cluster
-    EMBED_BATCH_SIZE: int = 32     # batch size for sentence-transformer inference
+    CLUSTER_MIN_SAMPLES: int = 3
+    EMBED_BATCH_SIZE: int = 32
 
     # Twilio (WhatsApp)
     TWILIO_ACCOUNT_SID: str = ""
     TWILIO_AUTH_TOKEN: str = ""
     TWILIO_WHATSAPP_FROM: str = "whatsapp:+14155238886"
 
-    # AWS S3 (file storage — optional, falls back to local)
+    # AWS S3 (optional)
     AWS_ACCESS_KEY_ID: str = ""
     AWS_SECRET_ACCESS_KEY: str = ""
     AWS_S3_BUCKET: str = ""

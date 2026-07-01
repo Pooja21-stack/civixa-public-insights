@@ -18,8 +18,8 @@ export default function DashboardStatsPanel() {
 
   if (!stats) return <div className="flex justify-center py-10"><Spinner /></div>;
 
-  const chartData = stats.top_themes.map((t) => ({
-    name: THEME_LABELS[t.theme].split(" ")[0], // short label
+  const chartData = (stats.top_themes ?? []).map((t) => ({
+    name: (THEME_LABELS[t.theme] ?? t.theme).split(" ")[0],
     count: t.count,
     theme: t.theme,
   }));
@@ -34,12 +34,12 @@ export default function DashboardStatsPanel() {
           sub={`+${stats.submissions_today} today`}
           accent
         />
-        <StatCard label="Wards Covered"    value={stats.wards_covered} />
-        <StatCard label="Priority Projects" value={stats.top_projects.length} />
+        <StatCard label="Wards Covered"    value={stats.wards_covered ?? 0} />
+        <StatCard label="Priority Projects" value={stats.top_projects?.length ?? 0} />
         <StatCard
           label="Top Theme"
-          value={THEME_LABELS[stats.top_themes[0].theme].split(" ")[0]}
-          sub={`${stats.top_themes[0].count} submissions`}
+          value={stats.top_themes?.[0] ? (THEME_LABELS[stats.top_themes[0].theme] ?? stats.top_themes[0].theme).split(" ")[0] : "—"}
+          sub={stats.top_themes?.[0] ? `${stats.top_themes[0].count} submissions` : "No data yet"}
         />
       </div>
 

@@ -10,10 +10,10 @@ class ProjectResponse(BaseModel):
 
     id: str
     title: str
-    description: Optional[str]
+    description: Optional[str] = None
     theme: str
-    ward_id: Optional[str]
-    ward_name: Optional[str]
+    ward_id: Optional[str] = None
+    ward_name: Optional[str] = None
     demand_score: float
     gap_score: float
     feasibility_score: float

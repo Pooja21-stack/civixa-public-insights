@@ -37,4 +37,9 @@ class Submission(Base, TimestampMixin):
     media_urls: Mapped[list] = mapped_column(JSON, default=list)
     submitter_phone: Mapped[str] = mapped_column(String(20), nullable=True)
 
-    ward = relationship("Ward", back_populates="submissions", foreign_keys=[ward_id])
+    ward = relationship(
+        "Ward",
+        back_populates="submissions",
+        primaryjoin="Submission.ward_id == Ward.id",
+        foreign_keys="[Submission.ward_id]",
+    )

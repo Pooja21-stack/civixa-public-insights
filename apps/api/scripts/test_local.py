@@ -18,8 +18,8 @@ What it does:
     7. Evidence generator — produce evidence text for top project
     8. Full pipeline simulation — end-to-end submission → ranked project
 
-Set OPENAI_API_KEY in your .env to enable live GPT-4o / Whisper calls.
-Without it, all services fall back gracefully and still demonstrate the logic.
+Requires Ollama running locally: ollama serve && ollama pull mistral
+All services fall back gracefully if Ollama is unavailable.
 """
 from __future__ import annotations
 
@@ -111,13 +111,8 @@ def demo_translator():
 # ─── 3. Theme extractor demo ───────────────────────────────────────────────────
 
 async def demo_theme_extractor():
-    section("3. Theme Extractor — GPT-4o analysis")
-
-    api_key = os.environ.get("OPENAI_API_KEY", "")
-    if not api_key:
-        warn("OPENAI_API_KEY not set — showing fallback behaviour")
-    else:
-        info("Using live GPT-4o", f"model={os.environ.get('OPENAI_MODEL', 'gpt-4o')}")
+    section("3. Theme Extractor — Ollama/Mistral analysis")
+    info("Using Ollama", f"model={os.environ.get('OLLAMA_MODEL', 'mistral')}")
 
     from app.services.ai.theme_extractor import extract_themes
 
@@ -135,7 +130,7 @@ async def demo_theme_extractor():
         elapsed = time.time() - t0
         themes  = ", ".join(result["themes"])
         urgency = f"{result['urgency_level']} ({result['urgency_score']:.2f})"
-        source  = "GPT-4o" if api_key else "fallback"
+        source  = "Ollama/mistral" if result["themes"] != ["other"] else "fallback"
         print(f"  {'✅':2}  [{source}] themes=[{themes}] urgency={urgency}  ({elapsed:.1f}s)")
         print(f"       {text[:70]}")
 
@@ -263,15 +258,13 @@ async def demo_rag():
     print()
     for question, ward_id in queries:
         chunks = await rag_pipeline.query_documents(question, ward_id=ward_id, top_k=2, db=None)
-        api_key = os.environ.get("OPENAI_API_KEY", "")
-        source = "zero-vector search (add OPENAI_API_KEY for semantic search)" if not api_key else "semantic search"
         print(f"  Q: {question}")
         if chunks:
             top = chunks[0]
-            print(f"  A: [{source}]")
+            print(f"  A: [sentence-transformers semantic search]")
             print(f"     Score={top['score']:.3f}  »  {top['chunk'][:120]}")
         else:
-            print(f"  A: No results (zero vectors — add OPENAI_API_KEY for real embeddings)")
+            print(f"  A: No results")
         print()
 
 
@@ -279,12 +272,7 @@ async def demo_rag():
 
 async def demo_evidence():
     section("7. Evidence Generator — AI evidence card for top project")
-
-    api_key = os.environ.get("OPENAI_API_KEY", "")
-    if not api_key:
-        warn("OPENAI_API_KEY not set — showing template-based evidence")
-    else:
-        info("Using live GPT-4o for evidence generation")
+    info("Using Ollama for evidence generation (template fallback if Ollama unavailable)")
 
     from app.services.ai.evidence_generator import generate_evidence
     from app.services.ai import rag_pipeline
@@ -380,11 +368,8 @@ async def demo_full_pipeline():
 async def main():
     print("\n" + "█" * 60)
     print("  CivIxa AI Pipeline — Local Test & Demo")
-    api_key = os.environ.get("OPENAI_API_KEY", "")
-    if api_key:
-        print(f"  OpenAI key: {'*' * 8}{api_key[-4:]}  (live GPT-4o enabled)")
-    else:
-        print("  OpenAI key: NOT SET  (all services use offline fallbacks)")
+    print(f"  Ollama URL: {os.environ.get('OLLAMA_BASE_URL', 'http://localhost:11434')}")
+    print(f"  Model:      {os.environ.get('OLLAMA_MODEL', 'mistral')}")
     print("█" * 60)
 
     tests_ok = run_pytest()
@@ -403,8 +388,7 @@ async def main():
     else:
         warn("Some tests failed — check output above")
     ok("All AI services demonstrated")
-    if not api_key:
-        info("To enable live GPT-4o calls", "add OPENAI_API_KEY=sk-... to apps/api/.env")
+    info("Live LLM calls", "require Ollama running — ollama serve && ollama pull mistral")
     print()
 
 

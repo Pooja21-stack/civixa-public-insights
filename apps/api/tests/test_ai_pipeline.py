@@ -1,8 +1,8 @@
 """
 Tests for the AI pipeline services.
 
-These tests run without a real OpenAI key or database — all external
-calls are either mocked or gracefully fall back to safe defaults.
+These tests run without any external API — all calls use Ollama (local)
+or fall back gracefully when Ollama is not running.
 """
 import pytest
 from unittest.mock import AsyncMock, patch, MagicMock
@@ -11,12 +11,12 @@ from unittest.mock import AsyncMock, patch, MagicMock
 # ─── theme_extractor ──────────────────────────────────────────────────────────
 
 class TestThemeExtractor:
-    """Test GPT-4o theme extraction with mocked OpenAI calls."""
+    """Test Ollama-based theme extraction."""
 
     @pytest.mark.asyncio
-    async def test_extract_themes_no_api_key(self, monkeypatch):
-        """Falls back gracefully when no API key is set."""
-        monkeypatch.setattr("app.core.config.settings.OPENAI_API_KEY", "")
+    async def test_extract_themes_ollama_unavailable(self, monkeypatch):
+        """Falls back gracefully when Ollama is not reachable."""
+        monkeypatch.setattr("app.core.config.settings.OLLAMA_BASE_URL", "http://localhost:0")
         from app.services.ai.theme_extractor import extract_themes
         result = await extract_themes("The road is broken")
         assert result["themes"] == ["other"]
@@ -24,57 +24,38 @@ class TestThemeExtractor:
         assert "urgency_score" in result
         assert "summary" in result
 
-    @pytest.mark.asyncio
-    async def test_extract_themes_success(self, monkeypatch):
-        """Returns correctly structured output — mocks the entire API call."""
-        monkeypatch.setattr("app.core.config.settings.OPENAI_API_KEY", "sk-test")
-
-        mock_response = MagicMock()
-        mock_response.choices[0].message.content = (
-            '{"themes": ["schools", "roads"], "urgency_score": 0.82, '
-            '"urgency_level": "high", "summary": "School too far."}'
+    def test_extract_themes_success_via_validate(self):
+        """_validate produces correct output from valid Ollama JSON."""
+        from app.services.ai.theme_extractor import _validate
+        result = _validate(
+            {"themes": ["schools", "roads"], "urgency_score": 0.82,
+             "urgency_level": "high", "summary": "School too far."},
+            "Children cannot reach school"
         )
-
-        # Patch at the module level so the client constructor is never reached
-        with patch("app.services.ai.theme_extractor.AsyncOpenAI") as MockClient:
-            instance = AsyncMock()
-            instance.chat.completions.create = AsyncMock(return_value=mock_response)
-            MockClient.return_value = instance
-
-            from app.services.ai.theme_extractor import _validate
-            result = _validate(
-                {"themes": ["schools", "roads"], "urgency_score": 0.82,
-                 "urgency_level": "high", "summary": "School too far."},
-                "Children cannot reach school"
-            )
-
         assert "schools" in result["themes"]
         assert result["urgency_level"] == "high"
         assert 0.0 <= result["urgency_score"] <= 1.0
 
     @pytest.mark.asyncio
-    async def test_extract_themes_bad_json_falls_back(self, monkeypatch):
-        """Falls back to default when GPT returns malformed JSON."""
-        monkeypatch.setattr("app.core.config.settings.OPENAI_API_KEY", "sk-test")
-
-        mock_response = MagicMock()
-        mock_response.choices[0].message.content = "NOT JSON AT ALL"
-
-        mock_client = MagicMock()
-        mock_client.chat.completions.create = AsyncMock(return_value=mock_response)
-
-        with patch("app.services.ai.theme_extractor.AsyncOpenAI", return_value=mock_client):
-            from app.services.ai.theme_extractor import extract_themes, _fallback
-            result = await extract_themes("Some text")
-
+    async def test_extract_themes_bad_connection_falls_back(self, monkeypatch):
+        """Falls back to default when Ollama endpoint is unreachable."""
+        monkeypatch.setattr("app.core.config.settings.OLLAMA_BASE_URL", "http://localhost:0")
+        from app.services.ai.theme_extractor import extract_themes
+        result = await extract_themes("Some text")
         assert result["themes"] == ["other"]
 
     def test_validate_clamps_score(self):
-        """_validate clamps urgency_score to [0, 1]."""
+        """_validate handles Ollama 0-10 scale and clamps to [0, 1]."""
         from app.services.ai.theme_extractor import _validate
-        result = _validate({"themes": ["schools"], "urgency_score": 1.5, "urgency_level": "high", "summary": "x"}, "x")
-        assert result["urgency_score"] == 1.0
+        # Ollama sometimes returns 0-10 scale — normalise to 0-1
+        result = _validate({"themes": ["schools"], "urgency_score": 9.5, "urgency_level": "critical", "summary": "x"}, "x")
+        assert result["urgency_score"] <= 1.0
 
+        # Standard 0–1 passthrough (no normalisation needed)
+        result = _validate({"themes": ["schools"], "urgency_score": 0.95, "urgency_level": "high", "summary": "x"}, "x")
+        assert result["urgency_score"] == 0.95
+
+        # Negative clamped to 0.0
         result = _validate({"themes": ["schools"], "urgency_score": -0.5, "urgency_level": "low", "summary": "x"}, "x")
         assert result["urgency_score"] == 0.0
 
@@ -97,10 +78,10 @@ class TestThemeExtractor:
 
 class TestTranscriber:
     @pytest.mark.asyncio
-    async def test_transcribe_no_key(self, monkeypatch):
-        monkeypatch.setattr("app.core.config.settings.OPENAI_API_KEY", "")
+    async def test_transcribe_empty_bytes(self):
+        """Falls back to empty string when given empty audio bytes."""
         from app.services.ai.transcriber import transcribe_audio
-        result = await transcribe_audio(b"fake_audio", "test.webm")
+        result = await transcribe_audio(b"", "test.webm")
         assert result == {"text": "", "lang": "en"}
 
     def test_normalise_lang_full_name(self):
@@ -178,17 +159,14 @@ class TestScorer:
 
     def test_compute_gap_score_schools(self):
         from app.services.ai.scorer import compute_gap_score
-        # 6.2 km to school is well above midpoint (4 km) → above-midpoint score
         score = compute_gap_score("schools", {"nearest_school_km": 6.2})
         assert score > 0.5
 
-        # 0.5 km to school → below-midpoint score (low gap)
         score = compute_gap_score("schools", {"nearest_school_km": 0.5})
         assert score < 0.5
 
     def test_compute_gap_score_health(self):
         from app.services.ai.scorer import compute_gap_score
-        # 20 km to hospital is very high gap (well above midpoint=10)
         score = compute_gap_score("health", {"nearest_hospital_km": 20.0})
         assert score > 0.6
 
@@ -199,9 +177,7 @@ class TestScorer:
 
     def test_compute_feasibility_score(self):
         from app.services.ai.scorer import compute_feasibility_score
-        # in dev plan + has boundary → 0.30 + 0.40 + 0.30 = 1.0
         assert compute_feasibility_score(in_dev_plan=True, ward_has_boundary=True)  == 1.0
-        # base only
         assert compute_feasibility_score(in_dev_plan=False, ward_has_boundary=False) == 0.30
 
     def test_rank_projects(self):
@@ -215,11 +191,10 @@ class TestScorer:
         assert ranked[0]["priority_rank"] == 1
         assert ranked[0]["priority_score"] > ranked[1]["priority_score"]
         assert ranked[1]["priority_score"] > ranked[2]["priority_score"]
-        # ranks are consecutive
         assert [p["priority_rank"] for p in ranked] == [1, 2, 3]
 
     def test_km_to_gap_score_sigmoid(self):
         from app.services.ai.scorer import _km_to_gap_score
-        assert _km_to_gap_score(0, 4)  <  0.2                             # 0 km → near-zero (returns 0.1)
-        assert _km_to_gap_score(4, 4)  == pytest.approx(0.5, abs=0.01)   # midpoint → 0.5
-        assert _km_to_gap_score(10, 4) >  0.7                             # far → high (sigmoid asymptote)
+        assert _km_to_gap_score(0, 4)  <  0.2
+        assert _km_to_gap_score(4, 4)  == pytest.approx(0.5, abs=0.01)
+        assert _km_to_gap_score(10, 4) >  0.7
