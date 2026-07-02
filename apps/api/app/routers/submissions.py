@@ -23,41 +23,60 @@ _VALID_THEMES = {"roads", "schools", "water", "health", "electricity", "other"}
 
 @router.post("", response_model=SubmissionResponse, status_code=201)
 async def create_submission(
-    text_raw: str                    = Form(...),
-    channel:  str                    = Form("web"),
-    lat:      Optional[float]        = Form(None),
-    lng:      Optional[float]        = Form(None),
-    ward_id:  Optional[str]          = Form(None),
-    lang:     Optional[str]          = Form(None),
-    theme:    Optional[str]          = Form(None),   # citizen-selected category hint
-    media:    Optional[UploadFile]   = File(None),
-    db:       AsyncSession           = Depends(get_db),
+    text_raw:  str                         = Form(...),
+    channel:   str                         = Form("web"),
+    lat:       Optional[float]             = Form(None),
+    lng:       Optional[float]             = Form(None),
+    ward_id:   Optional[str]               = Form(None),
+    lang:      Optional[str]               = Form(None),
+    theme:     Optional[str]               = Form(None),
+    # primary media file (voice.webm or first photo)
+    media:     Optional[UploadFile]        = File(None),
+    # additional photo files: media_0 … media_4
+    media_0:   Optional[UploadFile]        = File(None),
+    media_1:   Optional[UploadFile]        = File(None),
+    media_2:   Optional[UploadFile]        = File(None),
+    media_3:   Optional[UploadFile]        = File(None),
+    media_4:   Optional[UploadFile]        = File(None),
+    db:        AsyncSession                = Depends(get_db),
 ):
     """
     Accept a new citizen submission.
 
-    - Detects language and translates to English synchronously so the result
-      is immediately visible on the dashboard (no Celery dependency for this step).
-    - Persists the submission including translation + lang_detected.
-    - Fires a Celery background task for deeper AI enrichment (theme extraction, scoring).
+    Channels:
+      web   — text description, optional photo attachments
+      voice — text caption + audio file (media field)
+      (whatsapp submissions arrive via /webhooks/whatsapp)
+
+    - Detects language and translates to English synchronously.
+    - Stores all media files under uploads/.
+    - Fires Celery task for deeper AI enrichment.
     """
     from app.services.ai.translator import detect_and_translate
+    import os, aiofiles, uuid as _uuid
 
-    media_urls: list[str] = []
-
-    if media and media.size and media.size > 0:
+    async def _save(upload: UploadFile) -> str | None:
+        """Save one UploadFile and return its path, or None on failure."""
+        if not upload or not upload.filename:
+            return None
         try:
-            import os, aiofiles
-            upload_dir = "uploads"
-            os.makedirs(upload_dir, exist_ok=True)
-            filename = f"{media.filename}"
-            filepath = os.path.join(upload_dir, filename)
+            os.makedirs("uploads", exist_ok=True)
+            safe_name = f"{_uuid.uuid4().hex}_{upload.filename}"
+            filepath = os.path.join("uploads", safe_name)
             async with aiofiles.open(filepath, "wb") as f:
-                content = await media.read()
-                await f.write(content)
-            media_urls.append(filepath)
+                await f.write(await upload.read())
+            return filepath
         except Exception as e:
-            logger.warning("Media upload failed: %s", e)
+            logger.warning("Media upload failed (%s): %s", upload.filename, e)
+            return None
+
+    # Collect all uploaded files — primary + up to 5 extras
+    media_urls: list[str] = []
+    for upload in [media, media_0, media_1, media_2, media_3, media_4]:
+        if upload and upload.size and upload.size > 0:
+            path = await _save(upload)
+            if path:
+                media_urls.append(path)
 
     # ── Synchronous language detection + translation ──────────────────────────
     # Run detect_and_translate now so text_translated is stored immediately.

@@ -96,15 +96,17 @@ export async function fetchSubmissions(params?: {
 export async function createSubmission(data: FormData): Promise<Submission> {
   if (USE_MOCK_API) {
     await delay(800);
-    // Return a fake created submission so the form success state works
-    const text = data.get("text_raw") as string;
+    const text    = (data.get("text_raw") as string) || "";
+    const channel = (data.get("channel")  as string) || "web";
+    const wardId  = (data.get("ward_id")  as string) || undefined;
+    const lang    = (data.get("lang")     as string) || "en";
     return {
       id: `sub-mock-${Date.now()}`,
-      channel: "web",
+      channel: channel as Submission["channel"],
       text_raw: text,
-      text_translated: text,
-      lang: "en",
-      ward_id: (data.get("ward_id") as string) || undefined,
+      text_translated: lang !== "en" ? `[Translation of: ${text}]` : text,
+      lang,
+      ward_id: wardId,
       ward_name: undefined,
       themes: ["other"],
       urgency_score: 0.5,
