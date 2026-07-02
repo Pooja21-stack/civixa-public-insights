@@ -61,8 +61,8 @@ def _verify_twilio_signature(request_url: str, params: dict, signature: str) -> 
         # No token configured — allow through (dev mode)
         return True
     s = request_url + "".join(f"{k}{v}" for k, v in sorted(params.items()))
-    digest = hmac.new(auth_token.encode(), s.encode(), hashlib.sha1).digest()
     import base64
+    digest = hmac.new(auth_token.encode(), s.encode(), hashlib.sha1).digest()
     expected = base64.b64encode(digest).decode()
     return hmac.compare_digest(expected, signature or "")
 
@@ -123,10 +123,20 @@ async def whatsapp_webhook(
     if not body_text or body_text.lower() in {"help", "hi", "hello", "start", "menu"}:
         return _twiml_reply(_HELP_TEXT)
 
-    # ── Persist as a Submission ────────────────────────────────────────────────
+    # ── Detect language + translate synchronously ─────────────────────────────
     media_urls = [media_url] if media_url else []
     lang = _detect_lang_fast(body_text)
 
+    text_translated = body_text  # default: same as raw (English or unknown)
+    try:
+        from app.services.ai.translator import detect_and_translate
+        result = detect_and_translate(body_text)
+        lang             = result["lang_detected"]
+        text_translated  = result["text_translated"]
+    except Exception as e:
+        logger.warning("WhatsApp inline translation failed: %s", e)
+
+    # ── Persist as a Submission ────────────────────────────────────────────────
     try:
         submission = await submission_service.create_submission(
             db=db,
@@ -136,6 +146,7 @@ async def whatsapp_webhook(
             lng=lng,
             ward_id=None,   # geo-resolved async or manually later
             lang=lang,
+            text_translated=text_translated,
             media_urls=media_urls,
             submitter_phone=from_number,
         )

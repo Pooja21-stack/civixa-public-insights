@@ -5,10 +5,14 @@ Usage:
     cd apps/api
     python -m scripts.seed_db
 
+Safe to run multiple times — uses merge (upsert) so existing rows are updated,
+not duplicated. Also re-creates demo.db from scratch if --reset flag is passed:
+
+    python -m scripts.seed_db --reset
+
 Requires:
-    - DB running (docker-compose up db -d)
     - Alembic migrations applied (alembic upgrade head)
-    - .env present with correct DB credentials
+    - .env present (SQLITE_URL or DB_* vars)
 """
 from __future__ import annotations
 import asyncio
@@ -21,6 +25,7 @@ import uuid
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
+from sqlalchemy import select
 from app.core.config import settings
 from app.models.ward import Ward
 from app.models.submission import Submission, Channel, UrgencyLevel
@@ -57,33 +62,51 @@ PROJECTS = [
     {"id": "proj-005", "title": "Electricity Substation Upgrade — Ward 4",     "theme": "electricity", "ward_id": "ward-04", "submission_count": 29, "affected_population": 19200, "source": "citizen",   "evidence_text": "29 electricity submissions from Ward 4. Substation is running at 140% capacity."},
 ]
 
-MP_USER = {
-    "id":       str(uuid.uuid4()),
-    "email":    "mp@demo.civixa.in",
-    "name":     "Demo MP",
-    "password": "civixa2024",
-    "role":     UserRole.mp,
-    "constituency": "Demo Constituency",
-}
+MP_EMAIL    = "mp@demo.civixa.in"
+MP_PASSWORD = "civixa2024"
+
+
+async def _upsert(db, model_class, pk_field: str, pk_value, **kwargs):
+    """Fetch existing row by PK; update if found, insert if not."""
+    result = await db.execute(
+        select(model_class).where(getattr(model_class, pk_field) == pk_value)
+    )
+    obj = result.scalar_one_or_none()
+    if obj is None:
+        obj = model_class(**{pk_field: pk_value}, **kwargs)
+        db.add(obj)
+        return obj, "inserted"
+    for k, v in kwargs.items():
+        setattr(obj, k, v)
+    return obj, "updated"
 
 
 async def seed():
     async with AsyncSessionLocal() as db:
+
+        # ── Wards ──────────────────────────────────────────────────────────────
         print("Seeding wards...")
-        ward_map: dict[str, dict] = {}
         for w in WARDS:
-            ward = Ward(**w)
-            db.add(ward)
-            ward_map[w["id"]] = w
+            wid = w["id"]
+            _, action = await _upsert(db, Ward, "id", wid,
+                name=w["name"],
+                constituency=w["constituency"],
+                population=w["population"],
+                school_age_population=w["school_age_population"],
+                nearest_school_km=w["nearest_school_km"],
+                nearest_hospital_km=w["nearest_hospital_km"],
+            )
+            print(f"  ward {wid}: {action}")
         await db.flush()
 
+        # ── Submissions ────────────────────────────────────────────────────────
         print("Seeding submissions...")
         if os.path.exists(SUBMISSIONS_FILE):
             with open(SUBMISSIONS_FILE) as f:
                 raw_submissions = json.load(f)
             for s in raw_submissions:
-                sub = Submission(
-                    id              = s.get("id", str(uuid.uuid4())),
+                sid = s.get("id", str(uuid.uuid4()))
+                _, action = await _upsert(db, Submission, "id", sid,
                     channel         = Channel(s.get("channel", "web")),
                     text_raw        = s["text_raw"],
                     text_translated = s.get("text_translated"),
@@ -97,69 +120,85 @@ async def seed():
                     ai_analysis     = {},
                     media_urls      = [],
                 )
-                db.add(sub)
+            print(f"  {len(raw_submissions)} submissions seeded")
+        else:
+            print(f"  WARNING: submissions file not found at {SUBMISSIONS_FILE}")
         await db.flush()
 
+        # ── Projects ───────────────────────────────────────────────────────────
         print("Seeding projects with priority scores...")
-        # Build ward data map for scorer
         ward_data_map = {w["id"]: w for w in WARDS}
-
-        # Compute global max submission count for demand normalisation
         max_count = max(p["submission_count"] for p in PROJECTS)
 
-        for i, p in enumerate(PROJECTS):
-            wd = ward_data_map.get(p["ward_id"], {})
+        for p in PROJECTS:
+            wd          = ward_data_map.get(p["ward_id"], {})
             demand      = compute_demand_score(p["submission_count"], max_count)
             gap         = compute_gap_score(p["theme"], wd)
             feasibility = compute_feasibility_score(
                 in_dev_plan=p["source"] in ("combined", "dev_plan"),
                 ward_has_boundary=False,
             )
-            urgency     = 0.85 if p["theme"] == "health" else 0.78
-            priority    = compute_priority_score(demand, gap, feasibility, urgency)
+            urgency  = 0.85 if p["theme"] == "health" else 0.78
+            priority = compute_priority_score(demand, gap, feasibility, urgency)
 
-            proj = Project(
-                id                 = p["id"],
-                title              = p["title"],
-                theme              = p["theme"],
-                ward_id            = p["ward_id"],
-                demand_score       = demand,
-                gap_score          = gap,
-                feasibility_score  = feasibility,
-                urgency_score      = urgency,
-                priority_score     = priority,
-                priority_rank      = 0,  # assigned after sort
-                evidence_text      = p["evidence_text"],
-                submission_count   = p["submission_count"],
-                affected_population= p["affected_population"],
-                source             = ProjectSource(p["source"]),
+            await _upsert(db, Project, "id", p["id"],
+                title               = p["title"],
+                theme               = p["theme"],
+                ward_id             = p["ward_id"],
+                demand_score        = demand,
+                gap_score           = gap,
+                feasibility_score   = feasibility,
+                urgency_score       = urgency,
+                priority_score      = priority,
+                priority_rank       = 0,
+                evidence_text       = p["evidence_text"],
+                submission_count    = p["submission_count"],
+                affected_population = p["affected_population"],
+                source              = ProjectSource(p["source"]),
             )
-            db.add(proj)
         await db.flush()
 
-        # Assign ranks
-        from sqlalchemy import select
+        # Assign global ranks
         result = await db.execute(select(Project).order_by(Project.priority_score.desc()))
         all_projects = result.scalars().all()
         for rank, proj in enumerate(all_projects, start=1):
             proj.priority_rank = rank
             print(f"  #{rank} {proj.title} — score={proj.priority_score:.4f}")
 
+        # ── MP user ────────────────────────────────────────────────────────────
         print("Seeding MP user...")
-        mp = User(
-            id              = MP_USER["id"],
-            email           = MP_USER["email"],
-            name            = MP_USER["name"],
-            hashed_password = get_password_hash(MP_USER["password"]),
-            role            = MP_USER["role"],
-            constituency    = MP_USER["constituency"],
-            is_active       = True,
-        )
-        db.add(mp)
+        result = await db.execute(select(User).where(User.email == MP_EMAIL))
+        mp = result.scalar_one_or_none()
+        if mp is None:
+            mp = User(
+                id              = str(uuid.uuid4()),
+                email           = MP_EMAIL,
+                name            = "Demo MP",
+                hashed_password = get_password_hash(MP_PASSWORD),
+                role            = UserRole.mp,
+                constituency    = "Demo Constituency",
+                is_active       = True,
+            )
+            db.add(mp)
+            print("  MP user created")
+        else:
+            print("  MP user already exists — skipped")
 
         await db.commit()
-        print(f"\nDone! MP login: {MP_USER['email']} / {MP_USER['password']}")
+        print(f"\nDone! MP login: {MP_EMAIL} / {MP_PASSWORD}")
 
 
 if __name__ == "__main__":
+    # Optional --reset flag: delete and recreate demo.db before seeding
+    if "--reset" in sys.argv:
+        db_url = settings.DATABASE_URL
+        if "sqlite" in db_url:
+            db_path = db_url.split("///")[-1]
+            if os.path.exists(db_path):
+                os.remove(db_path)
+                print(f"Deleted {db_path}")
+        # Re-run alembic upgrade head
+        import subprocess
+        subprocess.run([sys.executable, "-m", "alembic", "upgrade", "head"], check=True)
+
     asyncio.run(seed())

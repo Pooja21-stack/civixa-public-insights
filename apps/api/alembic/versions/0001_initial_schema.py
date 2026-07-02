@@ -17,8 +17,11 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    # Enable pgvector extension (no-op if already exists)
-    op.execute("CREATE EXTENSION IF NOT EXISTS vector")
+    # Enable pgvector extension (PostgreSQL only — skipped for SQLite)
+    from alembic import context as _ctx
+    bind = op.get_bind()
+    if bind.dialect.name == "postgresql":
+        op.execute("CREATE EXTENSION IF NOT EXISTS vector")
 
     # ── wards ──────────────────────────────────────────────────────────────────
     op.create_table(
@@ -104,10 +107,13 @@ def upgrade() -> None:
         sa.Column("title",         sa.String(500),  nullable=False),
         sa.Column("doc_type",      sa.String(50),   default="other"),
         sa.Column("file_url",      sa.String(1000), nullable=True),
+        sa.Column("file_path",     sa.String(1000), nullable=True),
         sa.Column("content_text",  sa.Text,         nullable=True),
         sa.Column("ward_id",       sa.String(36),   nullable=True),
         sa.Column("metadata_json", sa.JSON,         default=dict),
         sa.Column("is_indexed",    sa.Boolean,      default=False),
+        sa.Column("status",        sa.String(20),   default="pending"),
+        sa.Column("chunk_count",   sa.Integer,      default=0),
         sa.Column("created_at",  sa.DateTime(timezone=True), server_default=sa.func.now()),
         sa.Column("updated_at",  sa.DateTime(timezone=True), server_default=sa.func.now()),
     )

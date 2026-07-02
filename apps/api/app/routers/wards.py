@@ -20,6 +20,7 @@ from sqlalchemy.orm import selectinload
 
 from app.core.auth_deps import require_role
 from app.core.database import get_db
+from app.models.user import User
 from app.models.ward import Ward
 from app.models.submission import Submission
 from app.models.project import Project

@@ -83,7 +83,14 @@ export async function fetchSubmissions(params?: {
     return { items, total: items.length };
   }
   const res = await submissionsApi.list(params as any);
-  return res.data;
+  const d = res.data;
+  // Normalise: API now returns lang and ward_name directly; keep fallbacks for safety
+  const items = (d.items ?? []).map((s: any) => ({
+    ...s,
+    lang:      s.lang      ?? s.lang_detected ?? "en",
+    ward_name: s.ward_name ?? undefined,
+  }));
+  return { items, total: d.total ?? items.length };
 }
 
 export async function createSubmission(data: FormData): Promise<Submission> {
@@ -150,5 +157,6 @@ export async function fetchWards(): Promise<Ward[]> {
     return MOCK_WARDS;
   }
   const res = await apiClient.get("/api/v1/wards");
-  return res.data;
+  // Real API returns { items: [...], total: N }
+  return res.data.items ?? res.data;
 }

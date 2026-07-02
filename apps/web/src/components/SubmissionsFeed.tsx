@@ -25,12 +25,23 @@ function getLangLabel(code: string | undefined): string | null {
   return LANG_NAMES[code.toLowerCase()] ?? code.toUpperCase();
 }
 
+// Track which submission IDs are showing the English translation (toggled)
 export default function SubmissionsFeed() {
   const [items, setItems]         = useState<Submission[]>([]);
   const [loading, setLoading]     = useState(true);
   const [themeFilter, setTheme]   = useState<string>("");
   const [wardFilter, setWard]     = useState<string>("");
   const [expanded, setExpanded]   = useState<string | null>(null);
+  // IDs where the user has clicked to see the English translation
+  const [translatedIds, setTranslatedIds] = useState<Set<string>>(new Set());
+
+  function toggleTranslation(id: string) {
+    setTranslatedIds((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  }
 
   useEffect(() => {
     setLoading(true);
@@ -88,7 +99,12 @@ export default function SubmissionsFeed() {
             >
               <div className="flex items-start justify-between gap-3">
                 <p className="text-sm text-gray-800 leading-relaxed flex-1">
-                  {s.text_translated || s.text_raw}
+                  {/* For non-English submissions: show original by default, translation when toggled */}
+                  {s.lang && s.lang !== "en" && s.text_translated
+                    ? translatedIds.has(s.id)
+                      ? s.text_translated
+                      : s.text_raw
+                    : s.text_translated || s.text_raw}
                 </p>
                 <div className="flex-shrink-0 flex flex-col items-end gap-2">
                   <UrgencyBadge level={s.urgency_level} />
@@ -102,17 +118,27 @@ export default function SubmissionsFeed() {
                     📍 {s.ward_name}
                   </span>
                 )}
-                {s.lang !== "en" && (
-                  <span className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded-full font-semibold border border-purple-200">
-                    🌐 {s.lang.toUpperCase()} → EN
-                  </span>
+                {s.lang && s.lang !== "en" && s.text_translated && (
+                  <button
+                    onClick={() => toggleTranslation(s.id)}
+                    title={translatedIds.has(s.id) ? "Show original" : "Translate to English"}
+                    className={`text-xs px-2 py-1 rounded-full font-semibold border transition-all cursor-pointer hover:scale-105 active:scale-95 ${
+                      translatedIds.has(s.id)
+                        ? "bg-purple-600 text-white border-purple-700 hover:bg-purple-700"
+                        : "bg-purple-100 text-purple-700 border-purple-200 hover:bg-purple-200"
+                    }`}
+                  >
+                    {translatedIds.has(s.id)
+                      ? `🌐 EN → ${s.lang.toUpperCase()}`
+                      : `🌐 ${s.lang.toUpperCase()} → EN`}
+                  </button>
                 )}
                 <span className="text-xs text-gray-400 ml-auto font-medium">
                   {new Date(s.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                 </span>
               </div>
-            );
-          })}
+            </div>
+          ))}
         </div>
       )}
     </div>

@@ -49,20 +49,29 @@ async def create_submission(
     lng: Optional[float] = None,
     ward_id: Optional[str] = None,
     lang: Optional[str] = None,
+    text_translated: Optional[str] = None,
     media_urls: Optional[list] = None,
     submitter_phone: Optional[str] = None,
+    theme_hint: Optional[list] = None,
 ) -> Submission:
-    """Persist the submission and return it. AI processing is async via Celery."""
+    """
+    Persist the submission and return it.
+
+    text_translated: already-computed English translation (done synchronously in the router).
+    theme_hint: citizen-selected category from the form (e.g. ["health"]).
+    Saved immediately so filters work even before the AI pipeline runs.
+    The Celery task may refine themes/urgency later with AI-extracted analysis.
+    """
     submission = Submission(
         id=str(uuid.uuid4()),
         channel=Channel(channel) if channel in Channel.__members__ else Channel.web,
         text_raw=text_raw,
-        text_translated=None,
+        text_translated=text_translated,   # stored immediately, not deferred
         lang_detected=lang or "en",
         lat=lat,
         lng=lng,
         ward_id=ward_id,
-        themes=[],
+        themes=theme_hint or [],   # ← use citizen hint immediately; AI refines later
         urgency_score=0.5,
         urgency_level=UrgencyLevel.medium,
         ai_analysis={},
@@ -114,11 +123,22 @@ async def list_submissions(
     theme: Optional[str] = None,
     ward_id: Optional[str] = None,
 ) -> dict:
-    query = select(Submission).order_by(Submission.created_at.desc())
+    from sqlalchemy.orm import selectinload
+    from app.schemas.submission import SubmissionResponse
+
+    query = (
+        select(Submission)
+        .options(selectinload(Submission.ward))   # eagerly load ward so ward_name is available
+        .order_by(Submission.created_at.desc())
+    )
 
     if theme:
-        # JSON array contains check — works with PostgreSQL jsonb
-        query = query.where(Submission.themes.contains([theme]))
+        # Cast JSON column to text and use LIKE — works on both SQLite and PostgreSQL.
+        # e.g. themes stored as '["roads","schools"]' matches LIKE '%"roads"%'
+        from sqlalchemy import cast, String
+        query = query.where(
+            cast(Submission.themes, String).like(f'%"{theme}"%')
+        )
     if ward_id:
         query = query.where(Submission.ward_id == ward_id)
 
@@ -130,7 +150,10 @@ async def list_submissions(
     query = query.offset((page - 1) * per_page).limit(per_page)
     rows = (await db.execute(query)).scalars().all()
 
-    return {"items": list(rows), "total": total, "page": page, "per_page": per_page}
+    # Resolve ward_name and lang alias on each row
+    items = [SubmissionResponse.from_orm_with_ward(row) for row in rows]
+
+    return {"items": items, "total": total, "page": page, "per_page": per_page}
 
 
 # ─── Hotspots GeoJSON ─────────────────────────────────────────────────────────

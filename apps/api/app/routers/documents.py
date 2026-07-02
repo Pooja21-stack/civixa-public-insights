@@ -165,9 +165,8 @@ async def query_document(
     """
     try:
         from app.services.ai.rag_pipeline import query_documents
-        from app.services.ai.evidence_generator import generate_evidence
 
-        results = query_documents(payload.question, top_k=payload.top_k)
+        results = await query_documents(payload.question, top_k=payload.top_k)
 
         if not results:
             return QueryResponse(
@@ -176,20 +175,20 @@ async def query_document(
                 sources=[],
             )
 
-        # Build context from top results
-        context = "\n\n".join(r["text"] for r in results)
-        evidence = await generate_evidence(
-            theme="document_query",
-            ward_name="constituency",
-            submission_count=0,
-            avg_urgency=0.5,
-            context_docs=context,
-        )
+        # Build a plain-text answer from the top chunks
+        top_chunks = [r.get("chunk", r.get("text", "")) for r in results[:3]]
+        answer = " ".join(top_chunks)[:1000]
 
         return QueryResponse(
             question=payload.question,
-            answer=evidence.get("evidence_summary", context[:500]),
-            sources=[{"text": r["text"][:200], "score": r.get("score", 0)} for r in results],
+            answer=answer,
+            sources=[
+                {
+                    "text": r.get("chunk", r.get("text", ""))[:200],
+                    "score": r.get("score", 0),
+                }
+                for r in results
+            ],
         )
     except Exception as e:
         logger.error("RAG query failed: %s", e)

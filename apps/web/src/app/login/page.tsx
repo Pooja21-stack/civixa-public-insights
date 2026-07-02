@@ -1,47 +1,90 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import Navbar from "@/components/Navbar";
+import { USE_MOCK_API } from "@/lib/flags";
+import { authApi } from "@/lib/api";
 
 export default function LoginPage() {
   const router = useRouter();
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+  const [email, setEmail]           = useState("");
+  const [password, setPassword]     = useState("");
+  const [rememberMe, setRememberMe] = useState(false);
+  const [loading, setLoading]       = useState(false);
+  const [error, setError]           = useState("");
+
+  // Pre-fill email if remembered previously
+  useEffect(() => {
+    const saved = localStorage.getItem("remembered_email");
+    if (saved) {
+      setEmail(saved);
+      setRememberMe(true);
+    }
+  }, []);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError("");
 
-    // Simulate login (replace with actual API call)
-    setTimeout(() => {
-      if (email && password) {
-        // For demo purposes, accept any credentials
-        router.push("/dashboard");
+    if (USE_MOCK_API) {
+      setTimeout(() => {
+        if (email && password) {
+          // Store a mock token so session persists
+          const storage = rememberMe ? localStorage : sessionStorage;
+          storage.setItem("token", "mock-token-demo");
+          if (rememberMe) {
+            localStorage.setItem("remembered_email", email);
+          } else {
+            localStorage.removeItem("remembered_email");
+          }
+          router.push("/dashboard");
+        } else {
+          setError("Please enter both email and password");
+          setLoading(false);
+        }
+      }, 600);
+      return;
+    }
+
+    // Real API
+    try {
+      const res = await authApi.login(email, password);
+      const { access_token } = res.data;
+
+      // Remember me: store in localStorage (persists) vs sessionStorage (tab only)
+      if (rememberMe) {
+        localStorage.setItem("token", access_token);
+        localStorage.setItem("remembered_email", email);
       } else {
-        setError("Please enter both email and password");
-        setLoading(false);
+        sessionStorage.setItem("token", access_token);
+        localStorage.removeItem("remembered_email");
+        // Also clear any old localStorage token
+        localStorage.removeItem("token");
       }
-    }, 1000);
+
+      router.push("/dashboard");
+    } catch (err: any) {
+      const detail = err?.response?.data?.detail ?? "Invalid email or password";
+      setError(typeof detail === "string" ? detail : "Login failed");
+      setLoading(false);
+    }
   };
 
   return (
     <>
       <Navbar active="/login" />
       <main className="min-h-[calc(100vh-64px)] bg-gradient-hero relative overflow-hidden flex items-center justify-center px-4 py-12">
-        {/* Decorative background elements */}
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
-          <div className="absolute top-20 left-10 w-72 h-72 bg-primary-200/30 rounded-full blur-3xl animate-pulse-soft"></div>
-          <div className="absolute bottom-20 right-10 w-96 h-96 bg-purple-200/30 rounded-full blur-3xl animate-pulse-soft" style={{ animationDelay: '1s' }}></div>
+          <div className="absolute top-20 left-10 w-72 h-72 bg-primary-200/30 rounded-full blur-3xl animate-pulse-soft" />
+          <div className="absolute bottom-20 right-10 w-96 h-96 bg-purple-200/30 rounded-full blur-3xl animate-pulse-soft" style={{ animationDelay: "1s" }} />
         </div>
 
         <div className="relative z-10 w-full max-w-md animate-scale-in">
-          {/* Login Card */}
           <div className="bg-white/80 backdrop-blur-sm rounded-3xl border-2 border-gray-200 p-8 shadow-soft-lg">
+
             {/* Header */}
             <div className="text-center mb-8">
               <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-r from-primary-600 to-purple-600 rounded-2xl mb-4 shadow-soft">
@@ -53,7 +96,7 @@ export default function LoginPage() {
               <p className="text-sm text-gray-600">Access your constituency dashboard</p>
             </div>
 
-            {/* Login Form */}
+            {/* Form */}
             <form onSubmit={handleLogin} className="space-y-5">
               {error && (
                 <div className="bg-rose-50 border-2 border-rose-200 rounded-xl p-3 text-sm text-rose-700 flex items-center gap-2">
@@ -66,8 +109,7 @@ export default function LoginPage() {
 
               <div className="space-y-2">
                 <label className="flex items-center gap-2 text-sm font-semibold text-gray-700">
-                  <span className="text-lg">📧</span>
-                  Email Address
+                  <span className="text-lg">📧</span> Email Address
                 </label>
                 <input
                   type="email"
@@ -81,8 +123,7 @@ export default function LoginPage() {
 
               <div className="space-y-2">
                 <label className="flex items-center gap-2 text-sm font-semibold text-gray-700">
-                  <span className="text-lg">🔒</span>
-                  Password
+                  <span className="text-lg">🔒</span> Password
                 </label>
                 <input
                   type="password"
@@ -94,14 +135,17 @@ export default function LoginPage() {
                 />
               </div>
 
+              {/* Remember me — now wired */}
               <div className="flex items-center justify-between text-sm">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input type="checkbox" className="w-4 h-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
+                <label className="flex items-center gap-2 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={rememberMe}
+                    onChange={(e) => setRememberMe(e.target.checked)}
+                    className="w-4 h-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500 cursor-pointer"
+                  />
                   <span className="text-gray-600">Remember me</span>
                 </label>
-                <a href="#" className="text-primary-600 hover:text-primary-700 font-medium">
-                  Forgot password?
-                </a>
               </div>
 
               <button
@@ -112,8 +156,8 @@ export default function LoginPage() {
                 {loading ? (
                   <>
                     <svg className="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                     </svg>
                     <span>Signing in...</span>
                   </>
@@ -128,20 +172,16 @@ export default function LoginPage() {
               </button>
             </form>
 
-            {/* Demo Credentials */}
-            <div className="mt-6 bg-gradient-to-br from-amber-50 to-amber-100 border-2 border-amber-200 rounded-xl p-4">
-              <p className="text-xs font-bold text-amber-900 mb-2 flex items-center gap-2">
-                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-                </svg>
-                Demo Mode
+            {/* Credentials hint */}
+            <div className="mt-6 bg-gradient-to-br from-blue-50 to-blue-100 border-2 border-blue-200 rounded-xl p-4">
+              <p className="text-xs font-bold text-blue-900 mb-1">
+                {USE_MOCK_API ? "Demo Mode — any credentials work" : "Test Credentials"}
               </p>
-              <p className="text-xs text-amber-800">
-                For demo purposes, enter any email and password to access the dashboard.
-              </p>
+              {!USE_MOCK_API && (
+                <p className="text-xs text-blue-800 font-mono">mp@demo.civixa.in / civixa2024</p>
+              )}
             </div>
 
-            {/* Footer */}
             <div className="mt-6 text-center">
               <p className="text-sm text-gray-600">
                 Not an MP?{" "}
@@ -149,28 +189,6 @@ export default function LoginPage() {
                   Submit a request instead
                 </Link>
               </p>
-            </div>
-          </div>
-
-          {/* Trust Indicators */}
-          <div className="mt-6 flex flex-wrap items-center justify-center gap-4 text-xs text-gray-500">
-            <div className="flex items-center gap-1.5">
-              <svg className="w-4 h-4 text-mint-600" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M2.166 4.999A11.954 11.954 0 0010 1.944 11.954 11.954 0 0017.834 5c.11.65.166 1.32.166 2.001 0 5.225-3.34 9.67-8 11.317C5.34 16.67 2 12.225 2 7c0-.682.057-1.35.166-2.001zm11.541 3.708a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-              </svg>
-              <span className="font-medium">Secure Login</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <svg className="w-4 h-4 text-primary-600" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
-              </svg>
-              <span className="font-medium">Encrypted</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <svg className="w-4 h-4 text-purple-600" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M2.166 4.999A11.954 11.954 0 0010 1.944 11.954 11.954 0 0017.834 5c.11.65.166 1.32.166 2.001 0 5.225-3.34 9.67-8 11.317C5.34 16.67 2 12.225 2 7c0-.682.057-1.35.166-2.001zm11.541 3.708a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-              </svg>
-              <span className="font-medium">Government Verified</span>
             </div>
           </div>
         </div>

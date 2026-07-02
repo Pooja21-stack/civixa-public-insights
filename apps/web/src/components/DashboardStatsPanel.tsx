@@ -18,7 +18,8 @@ export default function DashboardStatsPanel() {
 
   if (!stats) return <div className="flex justify-center py-10"><Spinner /></div>;
 
-  const chartData = (stats.top_themes ?? []).map((t) => ({
+  const topThemes = stats.top_themes ?? [];
+  const chartData = topThemes.map((t) => ({
     name: (THEME_LABELS[t.theme] ?? t.theme).split(" ")[0],
     count: t.count,
     theme: t.theme,
@@ -68,10 +69,10 @@ export default function DashboardStatsPanel() {
             </div>
           </div>
           <div className="text-2xl font-bold text-gray-900 mb-1">
-            {THEME_LABELS[stats.top_themes[0].theme].split(" ")[0]}
+            {topThemes[0] ? (THEME_LABELS[topThemes[0].theme] ?? topThemes[0].theme).split(" ")[0] : "—"}
           </div>
           <div className="text-xs font-medium text-gray-600">
-            Top Theme · {stats.top_themes[0].count} requests
+            Top Theme{topThemes[0] ? ` · ${topThemes[0].count} requests` : ""}
           </div>
         </div>
       </div>
