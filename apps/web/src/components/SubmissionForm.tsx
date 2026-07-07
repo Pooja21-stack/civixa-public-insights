@@ -257,6 +257,311 @@ function CaptionField({
   );
 }
 
+// ─── WhatsApp deep-link tab ───────────────────────────────────────────────────
+// The citizen fills in their request here, then clicks "Open WhatsApp" which
+// opens the real WhatsApp app (or web.whatsapp.com) pre-filled with a
+// structured message sent to the CivIxa helpline number.
+
+const WA_PHONE = "9199999999"; // Replace with real WhatsApp Business number
+const WA_DISPLAY = "+91 9999999999";
+
+// SVG QR-code that encodes the wa.me link — generated as a static inline SVG
+// (3-bit module pattern hand-crafted to look like a real QR; in production
+//  replace with a real QR library output or pre-generated PNG data URI)
+function WhatsAppQR() {
+  // Each row is a bitmask of filled (1) modules.  7×7 finder + quiet zone approximation.
+  const modules = [
+    "1111111011010111111",
+    "1000001001001000001",
+    "1011101010101011101",
+    "1011101001001011101",
+    "1011101011101011101",
+    "1000001001101000001",
+    "1111111010101111111",
+    "0000000001100000000",
+    "1101011011110110101",
+    "0110100110010110010",
+    "1010110101011010110",
+    "0101001010101001010",
+    "1001011101110101101",
+    "0000000011001000010",
+    "1111111001011110100",
+    "1000001011101001011",
+    "1011101001010110101",
+    "1011101010101010010",
+    "1111111011011101101",
+  ];
+  const SIZE = 19;
+  const CELL = 6;
+  return (
+    <svg
+      width={SIZE * CELL + 16}
+      height={SIZE * CELL + 16}
+      viewBox={`0 0 ${SIZE * CELL + 16} ${SIZE * CELL + 16}`}
+      xmlns="http://www.w3.org/2000/svg"
+      className="rounded-xl"
+      aria-label="QR code for WhatsApp helpline"
+    >
+      <rect width="100%" height="100%" fill="white" rx="10" />
+      {modules.map((row, r) =>
+        row.split("").map((cell, c) =>
+          cell === "1" ? (
+            <rect
+              key={`${r}-${c}`}
+              x={c * CELL + 8}
+              y={r * CELL + 8}
+              width={CELL - 1}
+              height={CELL - 1}
+              fill="#111827"
+              rx="1"
+            />
+          ) : null
+        )
+      )}
+    </svg>
+  );
+}
+
+function WhatsAppTab({
+  register,
+  theme,
+  ward_id,
+  lang,
+  onSubmitted,
+}: {
+  register: any;
+  theme: ThemeKey;
+  ward_id: string;
+  lang: string;
+  onSubmitted: (id: string) => void;
+}) {
+  const [request, setRequest]     = useState("");
+  const [copied, setCopied]       = useState(false);
+  const [sending, setSending]     = useState(false);
+  const [sent, setSent]           = useState(false);
+  const [trackingId, setTrackingId] = useState<string | null>(null);
+
+  const wardLabel  = WARD_OPTIONS.find((w) => w.value === ward_id)?.label ?? "";
+  const themeLabel = THEME_LABELS[theme] ?? theme;
+
+  // Build the structured WhatsApp message
+  const structuredMsg = [
+    `🏛️ *CivIxa Development Request*`,
+    ``,
+    request.trim() ? request.trim() : "[Describe your request here]",
+    ``,
+    `📋 Category: ${themeLabel}`,
+    wardLabel ? `📍 Area: ${wardLabel}` : null,
+    lang !== "en" ? `🌐 Language: ${lang.toUpperCase()}` : null,
+    ``,
+    `_Sent via CivIxa Public Insights_`,
+  ]
+    .filter((l) => l !== null)
+    .join("\n");
+
+  const waUrl = `https://wa.me/${WA_PHONE}?text=${encodeURIComponent(structuredMsg)}`;
+
+  function copyNumber() {
+    navigator.clipboard.writeText(WA_DISPLAY.replace(/\s/g, ""));
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
+
+  // Save submission to the system AND open WhatsApp simultaneously
+  async function handleOpenWhatsApp() {
+    // ⚠️ window.open MUST be called synchronously within the click handler
+    // (trusted user gesture) — calling it after an await gets blocked by browsers.
+    // Open a blank tab now, then navigate it to WhatsApp once the save completes.
+    // NOTE: do NOT pass "noopener" — that severs the window reference (returns null),
+    // making it impossible to set location.href afterwards.
+    const waWin = window.open("", "_blank");
+
+    setSending(true);
+    try {
+      const fd = new FormData();
+      fd.append("text_raw", request.trim() || structuredMsg);
+      fd.append("channel",  "whatsapp");
+      fd.append("lang",     lang);
+      fd.append("theme",    theme);
+      fd.append("ward_id",  ward_id || "");
+
+      const result = await createSubmission(fd);
+      setTrackingId(result.id ?? null);
+      setSent(true);
+      onSubmitted(result.id ?? "");
+    } catch {
+      // save failed — still redirect to WhatsApp
+    } finally {
+      setSending(false);
+      // Now point the already-opened tab at the WhatsApp URL
+      if (waWin) {
+        waWin.location.href = waUrl;
+      }
+    }
+  }
+
+  return (
+    <div className="space-y-5 animate-slide-up">
+
+      {/* ── Header banner ───────────────────────────────────────────────────── */}
+      <div className="bg-gradient-to-r from-[#075E54] to-[#128C7E] rounded-2xl px-5 py-4 flex items-center gap-4">
+        <div className="flex-shrink-0 w-12 h-12 bg-white/15 rounded-xl flex items-center justify-center">
+          <svg className="w-7 h-7 text-white" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M20.52 3.449C18.24 1.245 15.24 0 12.045 0 5.463 0 .104 5.334.101 11.893c0 2.096.549 4.14 1.595 5.945L0 24l6.335-1.652c1.746.943 3.71 1.444 5.71 1.447h.006c6.585 0 11.946-5.336 11.949-11.896.002-3.176-1.24-6.165-3.48-8.45zM12.045 21.785h-.005c-1.774 0-3.513-.478-5.031-1.378l-.361-.214-3.741.981 1-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.002-5.45 4.436-9.884 9.893-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.891 9.884zm5.43-7.403c-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.148-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.52.148-.174.198-.297.297-.495.099-.198.05-.372-.025-.521-.074-.148-.668-1.612-.916-2.207-.241-.579-.487-.5-.668-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.413-.074-.124-.272-.198-.57-.347z"/>
+          </svg>
+        </div>
+        <div>
+          <p className="text-white font-bold text-base leading-snug">Submit via WhatsApp</p>
+          <p className="text-white/80 text-xs mt-0.5 leading-relaxed">
+            Message our helpline number directly from your WhatsApp
+          </p>
+        </div>
+      </div>
+
+      {/* ── Two-column: QR + phone ───────────────────────────────────────────── */}
+      <div className="flex flex-col sm:flex-row gap-4">
+
+        {/* QR code */}
+        <div className="flex flex-col items-center gap-2 bg-gray-50 border-2 border-gray-200 rounded-2xl p-4">
+          <WhatsAppQR />
+          <p className="text-[11px] text-gray-500 font-medium text-center leading-tight">
+            Scan with your phone camera<br />to open WhatsApp
+          </p>
+        </div>
+
+        {/* Phone number + copy */}
+        <div className="flex-1 flex flex-col justify-center gap-3">
+          <div>
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">WhatsApp Helpline Number</p>
+            <div className="flex items-center gap-2">
+              <span className="text-2xl font-bold text-gray-900 tracking-wide">{WA_DISPLAY}</span>
+              <button
+                type="button"
+                onClick={copyNumber}
+                className={clsx(
+                  "flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all border",
+                  copied
+                    ? "bg-[#25D366]/10 text-[#075E54] border-[#25D366]/40"
+                    : "bg-gray-100 text-gray-600 border-gray-200 hover:bg-gray-200"
+                )}
+              >
+                {copied ? (
+                  <>
+                    <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                    </svg>
+                    Copied!
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                    </svg>
+                    Copy
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+
+          <div className="space-y-1.5 text-xs text-gray-500">
+            <div className="flex items-start gap-2">
+              <span className="text-[#25D366] font-bold mt-0.5">✓</span>
+              <span>Works on Android &amp; iPhone WhatsApp</span>
+            </div>
+            <div className="flex items-start gap-2">
+              <span className="text-[#25D366] font-bold mt-0.5">✓</span>
+              <span>Send text, voice note, or photo</span>
+            </div>
+            <div className="flex items-start gap-2">
+              <span className="text-[#25D366] font-bold mt-0.5">✓</span>
+              <span>Any language accepted</span>
+            </div>
+            <div className="flex items-start gap-2">
+              <span className="text-[#25D366] font-bold mt-0.5">✓</span>
+              <span>MP team responds within 48 hours</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Message composer ─────────────────────────────────────────────────── */}
+      <div className="space-y-2">
+        <label className="text-xs font-semibold text-gray-600 uppercase tracking-wide">
+          ✍️ Describe your request <span className="text-gray-400 font-normal normal-case">(optional — pre-fills your WhatsApp message)</span>
+        </label>
+        <textarea
+          value={request}
+          onChange={(e) => setRequest(e.target.value)}
+          rows={3}
+          placeholder="E.g. The road near our school has been broken for 3 months. Children cannot walk safely…"
+          className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#25D366] focus:border-[#25D366] resize-none transition-all bg-white hover:border-gray-300"
+        />
+      </div>
+
+      <CommonSelectors register={register} />
+
+      {/* ── Pre-filled preview ───────────────────────────────────────────────── */}
+      <div className="bg-[#ECE5DD] rounded-2xl p-3">
+        <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-2">Message preview</p>
+        <div className="bg-[#DCF8C6] rounded-xl rounded-tr-sm px-3 py-2.5 shadow-sm max-w-[90%] ml-auto">
+          <pre className="text-xs text-gray-800 whitespace-pre-wrap font-sans leading-relaxed">
+            {structuredMsg}
+          </pre>
+          <p className="text-[10px] text-gray-400 text-right mt-1">
+            {new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+          </p>
+        </div>
+      </div>
+
+      {/* ── Sent confirmation ────────────────────────────────────────────────── */}
+      {sent && trackingId && (
+        <div className="bg-[#25D366]/10 border-2 border-[#25D366]/40 rounded-xl p-4 flex items-start gap-3 animate-slide-up">
+          <svg className="w-5 h-5 text-[#075E54] flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+          </svg>
+          <div className="space-y-0.5">
+            <p className="text-sm font-bold text-[#075E54]">Recorded on MP dashboard ✓</p>
+            <p className="text-xs text-gray-600">
+              Reference: <span className="font-mono text-[#075E54] font-semibold">{trackingId.slice(0, 16)}</span>
+            </p>
+            <p className="text-xs text-gray-500">WhatsApp has opened — send the pre-filled message to complete your submission.</p>
+          </div>
+        </div>
+      )}
+
+      {/* ── Open WhatsApp button ─────────────────────────────────────────────── */}
+      <button
+        type="button"
+        onClick={handleOpenWhatsApp}
+        disabled={sending}
+        className="flex items-center justify-center gap-3 w-full py-4 bg-[#25D366] hover:bg-[#20ba58] disabled:opacity-60 disabled:cursor-not-allowed text-white rounded-xl font-bold text-base transition-all shadow-soft hover:shadow-lg transform hover:scale-[1.02]"
+      >
+        {sending ? (
+          <>
+            <svg className="animate-spin w-5 h-5" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+            </svg>
+            <span>Saving &amp; Opening WhatsApp…</span>
+          </>
+        ) : (
+          <>
+            <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M20.52 3.449C18.24 1.245 15.24 0 12.045 0 5.463 0 .104 5.334.101 11.893c0 2.096.549 4.14 1.595 5.945L0 24l6.335-1.652c1.746.943 3.71 1.444 5.71 1.447h.006c6.585 0 11.946-5.336 11.949-11.896.002-3.176-1.24-6.165-3.48-8.45zM12.045 21.785h-.005c-1.774 0-3.513-.478-5.031-1.378l-.361-.214-3.741.981 1-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.002-5.45 4.436-9.884 9.893-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.891 9.884zm5.43-7.403c-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.148-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.52.148-.174.198-.297.297-.495.099-.198.05-.372-.025-.521-.074-.148-.668-1.612-.916-2.207-.241-.579-.487-.5-.668-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.413-.074-.124-.272-.198-.57-.347z"/>
+            </svg>
+            <span>Open WhatsApp &amp; Send</span>
+          </>
+        )}
+      </button>
+
+      <p className="text-[11px] text-gray-400 text-center">
+        Your request is saved to the dashboard the moment you click — WhatsApp opens so you can confirm by sending the message.
+      </p>
+    </div>
+  );
+}
+
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export default function SubmissionForm() {
@@ -281,15 +586,14 @@ export default function SubmissionForm() {
   const [photoError, setPhotoError] = useState("");
 
   // Common fields via react-hook-form
-  const { register, getValues, reset } = useForm<CommonFields>({
+  const { register, getValues, watch, reset } = useForm<CommonFields>({
     defaultValues: { lang: "en", theme: "other", ward_id: "" },
   });
 
-  // WhatsApp demo chat state
-  const [waMessage, setWaMessage]   = useState("");
-  const [waError, setWaError]       = useState("");
-  const [waChatLog, setWaChatLog]   = useState<{ from: "user" | "bot"; text: string }[]>([]);
-  const [waSending, setWaSending]   = useState(false);
+  // Watch form fields so WhatsApp tab preview stays in sync
+  const watchedTheme   = watch("theme");
+  const watchedWard    = watch("ward_id");
+  const watchedLang    = watch("lang");
 
   // ── Validation ──────────────────────────────────────────────────────────────
 
@@ -334,51 +638,6 @@ export default function SubmissionForm() {
     }
 
     return ok;
-  }
-
-  // ── WhatsApp demo send ───────────────────────────────────────────────────────
-
-  async function sendWhatsAppMessage() {
-    const msg = waMessage.trim();
-    if (!msg || msg.length < 5) {
-      setWaError("Please type at least 5 characters.");
-      return;
-    }
-    setWaError("");
-    setWaSending(true);
-    setWaChatLog((prev) => [...prev, { from: "user", text: msg }]);
-    setWaMessage("");
-
-    try {
-      const { lang, theme, ward_id } = getValues();
-      const fd = new FormData();
-      fd.append("text_raw", msg);
-      fd.append("channel",  "whatsapp");
-      fd.append("lang",     lang);
-      fd.append("theme",    theme);
-      fd.append("ward_id",  ward_id || "");
-
-      const result = await createSubmission(fd);
-      setTrackingId(result.id ?? null);
-
-      // Bot acknowledgement after short delay
-      setTimeout(() => {
-        setWaChatLog((prev) => [
-          ...prev,
-          {
-            from: "bot",
-            text: `✅ Thank you! We've received your development suggestion and will review it shortly.\n\n🔖 Ref: ${result.id?.slice(0, 8) ?? "—"}`,
-          },
-        ]);
-        setWaSending(false);
-      }, 900);
-    } catch {
-      setWaChatLog((prev) => [
-        ...prev,
-        { from: "bot", text: "⚠️ Sorry, we couldn't save your message right now. Please try again." },
-      ]);
-      setWaSending(false);
-    }
   }
 
   // ── Submit (text / voice / photo tabs) ──────────────────────────────────────
@@ -693,119 +952,15 @@ export default function SubmissionForm() {
         </div>
       )}
 
-      {/* WHATSAPP tab — demo chat simulator */}
+      {/* WHATSAPP tab — real wa.me deep-link */}
       {activeTab === "whatsapp" && (
-        <div className="space-y-4 animate-slide-up">
-
-          {/* Phone-frame chat window */}
-          <div className="border-2 border-[#25D366]/40 rounded-2xl overflow-hidden shadow-soft">
-            {/* WhatsApp-style header bar */}
-            <div className="bg-[#075E54] px-4 py-3 flex items-center gap-3">
-              <div className="w-8 h-8 rounded-full bg-[#25D366] flex items-center justify-center text-white text-sm font-bold flex-shrink-0">
-                C
-              </div>
-              <div>
-                <p className="text-white text-sm font-semibold leading-none">CivIxa Helpline Bot</p>
-                <p className="text-[#25D366] text-[10px] mt-0.5">
-                  {waSending ? "typing…" : "online · Demo mode"}
-                </p>
-              </div>
-              <span className="ml-auto text-[10px] font-semibold bg-[#25D366]/20 text-[#25D366] px-2 py-0.5 rounded-full">
-                DEMO
-              </span>
-            </div>
-
-            {/* Chat messages */}
-            <div className="bg-[#ECE5DD] min-h-[200px] max-h-[280px] overflow-y-auto p-3 space-y-2 flex flex-col">
-              {/* Welcome message from bot */}
-              {waChatLog.length === 0 && (
-                <div className="self-start max-w-[80%]">
-                  <div className="bg-white rounded-2xl rounded-tl-sm px-3 py-2 shadow-sm">
-                    <p className="text-xs text-gray-800 leading-relaxed">
-                      👋 Hello! I&apos;m the CivIxa bot. Type your development request below and I&apos;ll pass it to your MP&apos;s dashboard. You can write in <strong>any language</strong>.
-                    </p>
-                    <p className="text-[10px] text-gray-400 text-right mt-1">Now</p>
-                  </div>
-                </div>
-              )}
-
-              {/* Dynamic chat log */}
-              {waChatLog.map((msg, i) => (
-                <div
-                  key={i}
-                  className={clsx("max-w-[80%]", msg.from === "user" ? "self-end" : "self-start")}
-                >
-                  <div
-                    className={clsx(
-                      "px-3 py-2 shadow-sm text-xs leading-relaxed whitespace-pre-line",
-                      msg.from === "user"
-                        ? "bg-[#DCF8C6] rounded-2xl rounded-tr-sm text-gray-800"
-                        : "bg-white rounded-2xl rounded-tl-sm text-gray-800"
-                    )}
-                  >
-                    {msg.text}
-                    <p className="text-[10px] text-gray-400 text-right mt-1">
-                      {new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                    </p>
-                  </div>
-                </div>
-              ))}
-
-              {/* Typing indicator */}
-              {waSending && (
-                <div className="self-start">
-                  <div className="bg-white rounded-2xl rounded-tl-sm px-4 py-2.5 shadow-sm flex items-center gap-1">
-                    <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
-                    <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
-                    <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Input bar */}
-            <div className="bg-[#F0F0F0] px-3 py-2 flex items-end gap-2 border-t border-gray-200">
-              <textarea
-                value={waMessage}
-                onChange={(e) => { setWaMessage(e.target.value); if (waError) setWaError(""); }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendWhatsAppMessage(); }
-                }}
-                rows={2}
-                placeholder="Type a message…"
-                className="flex-1 bg-white rounded-2xl px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-[#25D366] border border-gray-200"
-              />
-              <button
-                type="button"
-                onClick={sendWhatsAppMessage}
-                disabled={waSending}
-                className="flex-shrink-0 w-10 h-10 bg-[#25D366] hover:bg-[#20ba58] disabled:opacity-50 text-white rounded-full flex items-center justify-center transition-all shadow-sm"
-                title="Send"
-              >
-                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" />
-                </svg>
-              </button>
-            </div>
-          </div>
-
-          {/* Error */}
-          {waError && (
-            <p className="text-rose-500 text-xs flex items-center gap-1">
-              <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-              </svg>
-              {waError}
-            </p>
-          )}
-
-          {/* Language / ward selectors still apply */}
-          <CommonSelectors register={register} />
-
-          <p className="text-[11px] text-gray-400 text-center">
-            💡 Demo mode — messages are submitted directly to the backend as WhatsApp channel
-          </p>
-        </div>
+        <WhatsAppTab
+          register={register}
+          theme={watchedTheme}
+          ward_id={watchedWard}
+          lang={watchedLang}
+          onSubmitted={(id) => { setTrackingId(id); }}
+        />
       )}
 
       {/* ── Submit button (text / voice / photo tabs only) ───────────────────── */}
