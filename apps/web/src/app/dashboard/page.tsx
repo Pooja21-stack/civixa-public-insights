@@ -23,7 +23,7 @@ export default function DashboardPage() {
               Live Dashboard
             </div>
             <h1 className="text-3xl font-bold text-gray-900 mb-1">MP Dashboard</h1>
-            <p className="text-sm text-gray-600">Demo Constituency · AI-ranked development priorities</p>
+            <p className="text-sm text-gray-600">My Constituency · AI-ranked development priorities</p>
           </div>
 
           {/* Stats + chart */}

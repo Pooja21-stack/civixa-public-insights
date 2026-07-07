@@ -104,7 +104,7 @@ export default function SubmitPage() {
                   </span>
                 </div>
                 <p className="text-xs text-mint-700 font-semibold mt-2">
-                  📞 +91-XXXX-XXXXXX
+                   📞 +91 99999 99999
                 </p>
               </div>
 
@@ -124,7 +124,7 @@ export default function SubmitPage() {
                   </span>
                 </div>
                 <p className="text-xs text-purple-700 font-semibold mt-2">
-                  📞 1800-XXX-XXXX
+                   📞 1800-000-0000
                 </p>
               </div>
             </div>

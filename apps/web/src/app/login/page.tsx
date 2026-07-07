@@ -172,16 +172,6 @@ export default function LoginPage() {
               </button>
             </form>
 
-            {/* Credentials hint */}
-            <div className="mt-6 bg-gradient-to-br from-blue-50 to-blue-100 border-2 border-blue-200 rounded-xl p-4">
-              <p className="text-xs font-bold text-blue-900 mb-1">
-                {USE_MOCK_API ? "Demo Mode — any credentials work" : "Test Credentials"}
-              </p>
-              {!USE_MOCK_API && (
-                <p className="text-xs text-blue-800 font-mono">mp@demo.civixa.in / civixa2024</p>
-              )}
-            </div>
-
             <div className="mt-6 text-center">
               <p className="text-sm text-gray-600">
                 Not an MP?{" "}
