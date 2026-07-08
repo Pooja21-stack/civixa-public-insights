@@ -100,6 +100,20 @@ export async function createSubmission(data: FormData): Promise<Submission> {
     const channel = (data.get("channel")  as string) || "web";
     const wardId  = (data.get("ward_id")  as string) || undefined;
     const lang    = (data.get("lang")     as string) || "en";
+
+    // Convert audio blob → data: URI so the feed can play it back
+    let audio_url: string | undefined;
+    if (channel === "voice") {
+      const blob = data.get("media") as Blob | null;
+      if (blob && blob.size > 0) {
+        audio_url = await new Promise<string>((resolve) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result as string);
+          reader.readAsDataURL(blob);
+        });
+      }
+    }
+
     return {
       id: `sub-mock-${Date.now()}`,
       channel: channel as Submission["channel"],
@@ -112,6 +126,7 @@ export async function createSubmission(data: FormData): Promise<Submission> {
       urgency_score: 0.5,
       urgency_level: "medium",
       created_at: new Date().toISOString(),
+      audio_url,
     };
   }
   const res = await submissionsApi.create(data);

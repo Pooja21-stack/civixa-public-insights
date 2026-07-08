@@ -17,6 +17,7 @@ export interface Submission {
   urgency_score: number;
   urgency_level: UrgencyLevel;
   created_at: string;
+  audio_url?: string;      // data: URI for voice submissions (mock) or remote URL (API)
 }
 
 export interface Theme {

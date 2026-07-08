@@ -98,14 +98,28 @@ export default function SubmissionsFeed() {
               style={{ animationDelay: `${idx * 0.05}s` }}
             >
               <div className="flex items-start justify-between gap-3">
-                <p className="text-sm text-gray-800 leading-relaxed flex-1">
-                  {/* For non-English submissions: show original by default, translation when toggled */}
-                  {s.lang && s.lang !== "en" && s.text_translated
-                    ? translatedIds.has(s.id)
-                      ? s.text_translated
-                      : s.text_raw
-                    : s.text_translated || s.text_raw}
-                </p>
+                <div className="flex-1 space-y-2">
+                  <p className="text-sm text-gray-800 leading-relaxed">
+                    {/* For non-English submissions: show original by default, translation when toggled */}
+                    {s.lang && s.lang !== "en" && s.text_translated
+                      ? translatedIds.has(s.id)
+                        ? s.text_translated
+                        : s.text_raw
+                      : s.text_translated || s.text_raw}
+                  </p>
+                  {/* Audio player — only for voice submissions that have a recording */}
+                  {s.channel === "voice" && s.audio_url && (
+                    <div className="bg-purple-50 border border-purple-200 rounded-xl px-3 py-2 flex items-center gap-2">
+                      <span className="text-purple-500 text-sm flex-shrink-0">🎙️</span>
+                      <audio
+                        controls
+                        src={s.audio_url}
+                        className="flex-1 h-8"
+                        style={{ minWidth: 0 }}
+                      />
+                    </div>
+                  )}
+                </div>
                 <div className="flex-shrink-0 flex flex-col items-end gap-2">
                   <UrgencyBadge level={s.urgency_level} />
                   <ChannelIcon channel={s.channel} />
