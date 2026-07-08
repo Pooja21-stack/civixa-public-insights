@@ -100,13 +100,19 @@ export default function SubmissionsFeed() {
               <div className="flex items-start justify-between gap-3">
                 <div className="flex-1 space-y-2">
                   <p className="text-sm text-gray-800 leading-relaxed">
-                    {/* For non-English submissions: show original by default, translation when toggled */}
+                    {/* Non-English with translation: toggle between original and translation */}
                     {s.lang && s.lang !== "en" && s.text_translated
                       ? translatedIds.has(s.id)
-                        ? s.text_translated
-                        : s.text_raw
-                      : s.text_translated || s.text_raw}
+                        ? s.text_translated   // showing English translation
+                        : s.text_raw          // showing original language
+                      : s.text_raw || s.text_translated}
                   </p>
+                  {/* Language label — shown when no translation is available */}
+                  {s.lang && s.lang !== "en" && !s.text_translated && (
+                    <span className="inline-flex items-center gap-1 text-[11px] text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">
+                      🌐 Original · {s.lang.toUpperCase()}
+                    </span>
+                  )}
                   {/* Audio player — only for voice submissions that have a recording */}
                   {s.channel === "voice" && s.audio_url && (
                     <div className="bg-purple-50 border border-purple-200 rounded-xl px-3 py-2 flex items-center gap-2">

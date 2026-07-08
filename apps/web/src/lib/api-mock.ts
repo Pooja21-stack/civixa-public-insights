@@ -158,7 +158,8 @@ export async function createSubmission(data: FormData): Promise<Submission> {
       id,
       channel: channel as Submission["channel"],
       text_raw: text,
-      text_translated: lang !== "en" ? `[Translation of: ${text}]` : text,
+      // No translation available in mock — set undefined so feed shows original cleanly
+      text_translated: lang === "en" ? text : undefined,
       lang,
       ward_id: wardId,
       ward_name: wardName,
