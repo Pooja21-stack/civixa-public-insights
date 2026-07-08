@@ -17,7 +17,7 @@ import {
   MOCK_WARDS,
   delay,
 } from "@/lib/mock-data";
-import type { DashboardStats, Project, Submission, Theme, Ward } from "@/types";
+import type { DashboardStats, Project, Submission, Theme, ThemeKey, Ward } from "@/types";
 
 // ─── Dashboard ────────────────────────────────────────────────────────────────
 
@@ -133,6 +133,12 @@ export async function createSubmission(data: FormData): Promise<Submission> {
     const channel = (data.get("channel")  as string) || "web";
     const wardId  = (data.get("ward_id")  as string) || undefined;
     const lang    = (data.get("lang")     as string) || "en";
+    const theme   = (data.get("theme")    as string) || "other";
+
+    // Resolve ward name from the ward ID
+    const wardName = wardId
+      ? MOCK_WARDS.find((w) => w.id === wardId)?.name
+      : undefined;
 
     // Create a blob object URL for the audio — stored in memory, not localStorage
     let audio_url: string | undefined;
@@ -143,6 +149,10 @@ export async function createSubmission(data: FormData): Promise<Submission> {
       }
     }
 
+    // Simple urgency scoring based on text length / keywords
+    const urgency_score = text.length > 100 ? 0.75 : 0.5;
+    const urgency_level = urgency_score >= 0.75 ? "high" : "medium";
+
     const id = `sub-mock-${Date.now()}`;
     const submission: Submission = {
       id,
@@ -151,10 +161,10 @@ export async function createSubmission(data: FormData): Promise<Submission> {
       text_translated: lang !== "en" ? `[Translation of: ${text}]` : text,
       lang,
       ward_id: wardId,
-      ward_name: undefined,
-      themes: ["other"],
-      urgency_score: 0.5,
-      urgency_level: "medium",
+      ward_name: wardName,
+      themes: [theme as ThemeKey],
+      urgency_score,
+      urgency_level: urgency_level as Submission["urgency_level"],
       created_at: new Date().toISOString(),
       audio_url,
     };
