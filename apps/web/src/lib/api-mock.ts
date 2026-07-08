@@ -158,9 +158,8 @@ export async function createSubmission(data: FormData): Promise<Submission> {
       id,
       channel: channel as Submission["channel"],
       text_raw: text,
-      // Mock translation: prefix with [EN] so the translate button appears in the feed.
-      // The real FastAPI backend will replace this with an actual translation.
-      text_translated: lang === "en" ? text : `[EN] ${text}`,
+      // No backend translation in mock mode — the feed calls MyMemory API on demand.
+      text_translated: lang === "en" ? text : undefined,
       lang,
       ward_id: wardId,
       ward_name: wardName,
