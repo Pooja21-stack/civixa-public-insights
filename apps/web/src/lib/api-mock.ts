@@ -70,20 +70,32 @@ export async function fetchProject(id: string): Promise<Project> {
 
 // ─── Submissions ──────────────────────────────────────────────────────────────
 
-// localStorage key for submissions created in this browser
+// localStorage key — stores submissions WITHOUT audio (audio is too large for LS)
 const LS_KEY = "civixa_session_submissions";
+
+// Module-level map: submission id → object URL for audio (lives for the browser session)
+const AUDIO_OBJECT_URLS = new Map<string, string>();
 
 function loadSessionSubmissions(): Submission[] {
   if (typeof window === "undefined") return [];
   try {
-    return JSON.parse(localStorage.getItem(LS_KEY) || "[]") as Submission[];
+    const stored = JSON.parse(localStorage.getItem(LS_KEY) || "[]") as Submission[];
+    // Re-attach any in-memory audio URLs that survived this session
+    return stored.map((s) =>
+      AUDIO_OBJECT_URLS.has(s.id)
+        ? { ...s, audio_url: AUDIO_OBJECT_URLS.get(s.id) }
+        : s
+    );
   } catch { return []; }
 }
 
 function saveSessionSubmissions(items: Submission[]) {
   if (typeof window === "undefined") return;
-  // Keep only last 50 to avoid filling storage (audio data URIs are large)
-  localStorage.setItem(LS_KEY, JSON.stringify(items.slice(-50)));
+  // Strip audio_url before storing — object URLs and data URIs are too large / non-serialisable
+  const stripped = items.slice(-50).map(({ audio_url, ...rest }) => rest);
+  try {
+    localStorage.setItem(LS_KEY, JSON.stringify(stripped));
+  } catch { /* quota exceeded — skip */ }
 }
 
 export async function fetchSubmissions(params?: {
@@ -93,7 +105,7 @@ export async function fetchSubmissions(params?: {
 }): Promise<{ items: Submission[]; total: number }> {
   if (USE_MOCK_API) {
     await delay(300);
-    // Merge session submissions (newest first) with static mock data
+    // Merge session submissions (newest first, audio URLs re-attached) with mock data
     const session = loadSessionSubmissions();
     let items = [
       ...session.slice().reverse(),
@@ -122,21 +134,18 @@ export async function createSubmission(data: FormData): Promise<Submission> {
     const wardId  = (data.get("ward_id")  as string) || undefined;
     const lang    = (data.get("lang")     as string) || "en";
 
-    // Convert audio blob → data: URI so the feed can play it back
+    // Create a blob object URL for the audio — stored in memory, not localStorage
     let audio_url: string | undefined;
     if (channel === "voice") {
       const blob = data.get("media") as Blob | null;
       if (blob && blob.size > 0) {
-        audio_url = await new Promise<string>((resolve) => {
-          const reader = new FileReader();
-          reader.onloadend = () => resolve(reader.result as string);
-          reader.readAsDataURL(blob);
-        });
+        audio_url = URL.createObjectURL(blob);
       }
     }
 
+    const id = `sub-mock-${Date.now()}`;
     const submission: Submission = {
-      id: `sub-mock-${Date.now()}`,
+      id,
       channel: channel as Submission["channel"],
       text_raw: text,
       text_translated: lang !== "en" ? `[Translation of: ${text}]` : text,
@@ -150,7 +159,10 @@ export async function createSubmission(data: FormData): Promise<Submission> {
       audio_url,
     };
 
-    // Persist to localStorage so the dashboard feed can see it across navigations
+    // Keep the object URL in the module-level map so it survives navigation
+    if (audio_url) AUDIO_OBJECT_URLS.set(id, audio_url);
+
+    // Save metadata (without audio) to localStorage for cross-navigation persistence
     const existing = loadSessionSubmissions();
     saveSessionSubmissions([...existing, submission]);
     return submission;
