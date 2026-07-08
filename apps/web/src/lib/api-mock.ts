@@ -70,6 +70,10 @@ export async function fetchProject(id: string): Promise<Project> {
 
 // ─── Submissions ──────────────────────────────────────────────────────────────
 
+// In-memory store for submissions created this session.
+// Persists across page navigations within the same tab.
+const SESSION_SUBMISSIONS: Submission[] = [];
+
 export async function fetchSubmissions(params?: {
   theme?: string;
   ward_id?: string;
@@ -77,7 +81,11 @@ export async function fetchSubmissions(params?: {
 }): Promise<{ items: Submission[]; total: number }> {
   if (USE_MOCK_API) {
     await delay(300);
-    let items = [...MOCK_SUBMISSIONS];
+    // Merge session submissions (newest first) with static mock data
+    let items = [
+      ...SESSION_SUBMISSIONS.slice().reverse(),
+      ...MOCK_SUBMISSIONS,
+    ];
     if (params?.theme) items = items.filter((s) => s.themes.includes(params.theme as any));
     if (params?.ward_id) items = items.filter((s) => s.ward_id === params.ward_id);
     return { items, total: items.length };
@@ -114,7 +122,7 @@ export async function createSubmission(data: FormData): Promise<Submission> {
       }
     }
 
-    return {
+    const submission: Submission = {
       id: `sub-mock-${Date.now()}`,
       channel: channel as Submission["channel"],
       text_raw: text,
@@ -128,6 +136,10 @@ export async function createSubmission(data: FormData): Promise<Submission> {
       created_at: new Date().toISOString(),
       audio_url,
     };
+
+    // Push into session store so the feed shows it immediately
+    SESSION_SUBMISSIONS.push(submission);
+    return submission;
   }
   const res = await submissionsApi.create(data);
   return res.data;
