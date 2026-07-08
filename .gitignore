@@ -61,19 +61,17 @@ out/
 
 # ─── Environment files ────────────────────────────────────────────────────────
 .env
+.env.example
+.env.local.example
 .env.local
 .env.development.local
 .env.test.local
 .env.production.local
 .env.*.local
 
-# Keep example files (no secrets)
-!.env.example
-!.env.local.example
 
 # ─── IDE / Editor ─────────────────────────────────────────────────────────────
 .vscode/
-!.vscode/extensions.json
 .idea/
 *.swp
 *.swo
