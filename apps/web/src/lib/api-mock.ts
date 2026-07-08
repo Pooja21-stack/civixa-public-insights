@@ -70,9 +70,21 @@ export async function fetchProject(id: string): Promise<Project> {
 
 // ─── Submissions ──────────────────────────────────────────────────────────────
 
-// In-memory store for submissions created this session.
-// Persists across page navigations within the same tab.
-const SESSION_SUBMISSIONS: Submission[] = [];
+// localStorage key for submissions created in this browser
+const LS_KEY = "civixa_session_submissions";
+
+function loadSessionSubmissions(): Submission[] {
+  if (typeof window === "undefined") return [];
+  try {
+    return JSON.parse(localStorage.getItem(LS_KEY) || "[]") as Submission[];
+  } catch { return []; }
+}
+
+function saveSessionSubmissions(items: Submission[]) {
+  if (typeof window === "undefined") return;
+  // Keep only last 50 to avoid filling storage (audio data URIs are large)
+  localStorage.setItem(LS_KEY, JSON.stringify(items.slice(-50)));
+}
 
 export async function fetchSubmissions(params?: {
   theme?: string;
@@ -82,8 +94,9 @@ export async function fetchSubmissions(params?: {
   if (USE_MOCK_API) {
     await delay(300);
     // Merge session submissions (newest first) with static mock data
+    const session = loadSessionSubmissions();
     let items = [
-      ...SESSION_SUBMISSIONS.slice().reverse(),
+      ...session.slice().reverse(),
       ...MOCK_SUBMISSIONS,
     ];
     if (params?.theme) items = items.filter((s) => s.themes.includes(params.theme as any));
@@ -137,8 +150,9 @@ export async function createSubmission(data: FormData): Promise<Submission> {
       audio_url,
     };
 
-    // Push into session store so the feed shows it immediately
-    SESSION_SUBMISSIONS.push(submission);
+    // Persist to localStorage so the dashboard feed can see it across navigations
+    const existing = loadSessionSubmissions();
+    saveSessionSubmissions([...existing, submission]);
     return submission;
   }
   const res = await submissionsApi.create(data);
