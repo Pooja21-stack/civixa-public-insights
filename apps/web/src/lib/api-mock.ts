@@ -158,8 +158,9 @@ export async function createSubmission(data: FormData): Promise<Submission> {
       id,
       channel: channel as Submission["channel"],
       text_raw: text,
-      // No translation available in mock — set undefined so feed shows original cleanly
-      text_translated: lang === "en" ? text : undefined,
+      // Mock translation: prefix with [EN] so the translate button appears in the feed.
+      // The real FastAPI backend will replace this with an actual translation.
+      text_translated: lang === "en" ? text : `[EN] ${text}`,
       lang,
       ward_id: wardId,
       ward_name: wardName,
