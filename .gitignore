@@ -116,3 +116,4 @@ sentence_transformers/
 *.map
 tmp/
 temp/
+*.tsbuildinfo
